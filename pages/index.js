@@ -11,14 +11,14 @@ export default function Home() {
   const [callStatus, setCallStatus] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
 
-  // Cargar Twilio Client SDK v1.14 (última versión estable)
+  // Cargar Twilio Voice JavaScript SDK 2.x (soporte completo JWT)
   useEffect(() => {
-    console.log('📥 Cargando Twilio SDK...');
+    console.log('📥 Cargando Twilio Voice SDK 2.x...');
     const script = document.createElement('script');
-    script.src = 'https://media.twiliocdn.com/sdk/js/client/v1.14/twilio.min.js';
-    script.async = false; // Sincrónicamente para asegurar carga
+    script.src = 'https://sdk.twilio.com/js/voice/releases/2.12.0/twilio.min.js';
+    script.async = false;
     script.onload = () => {
-      console.log('✅ Twilio SDK cargado correctamente');
+      console.log('✅ Twilio Voice SDK cargado');
       console.log('Twilio disponible:', typeof Twilio !== 'undefined');
       console.log('Twilio.Device disponible:', typeof Twilio !== 'undefined' && typeof Twilio.Device !== 'undefined');
     };
@@ -74,63 +74,61 @@ export default function Home() {
 
       const { token } = tokenData;
 
-      // Inicializar Twilio Device v1.14
+      // Inicializar Twilio Voice SDK 2.x
       console.log('🔍 Verificando Twilio SDK...', typeof Twilio);
 
       if (typeof Twilio !== 'undefined' && typeof Twilio.Device !== 'undefined') {
-        console.log('✅ Twilio SDK disponible');
+        console.log('✅ Twilio Voice SDK disponible');
 
         // Esperar un momento para asegurar que SDK esté listo
         await new Promise(resolve => setTimeout(resolve, 200));
 
-        // Crear Device SIN argumentos primero
-        const device = new Twilio.Device();
-        console.log('📱 Twilio Device creado (sin token aún)');
+        // En SDK 2.x, crear Device CON el token directamente
+        console.log('📱 Creando Twilio Device con token...');
+        console.log('Token length:', token.length);
 
-        device.on('ready', function(device) {
-          console.log('✅ Twilio Device listo para llamadas');
+        const device = new Twilio.Device(token, {
+          codecPreferences: [Twilio.Device.CodecName.Opus, Twilio.Device.CodecName.PCMU],
+          edge: 'ashburn',
+          logLevel: 'debug'
+        });
+
+        console.log('Device creado, registrando event listeners...');
+
+        device.on('registered', () => {
+          console.log('✅ Device registrado y listo');
           setCallStatus('Listo para llamar');
           setTwilioDevice(device);
           setSessionStarted(true);
           loadNextLead();
         });
 
-        device.on('error', function(error) {
+        device.on('error', (error) => {
           console.error('❌ Error Twilio:', error);
-          console.error('Error code:', error.code);
-          console.error('Error message:', error.message);
-          setCallStatus('Error: ' + error.message);
-          alert('Error Twilio: ' + error.message + ' (Code: ' + error.code + ')');
+          setCallStatus('Error: ' + (error.message || 'Unknown error'));
+          alert('Error Twilio: ' + (error.message || 'Unknown error'));
         });
 
-        device.on('connect', function(conn) {
+        device.on('connect', (call) => {
           console.log('📞 Llamada conectada');
-          setActiveCall(conn);
+          setActiveCall(call);
           setCallStatus('En llamada');
         });
 
-        device.on('disconnect', function(conn) {
+        device.on('disconnect', () => {
           console.log('📴 Llamada terminada');
           setActiveCall(null);
           setCallStatus('Llamada terminada');
         });
 
-        device.on('offline', function() {
-          console.log('📡 Device offline');
+        device.on('unregistered', () => {
+          console.log('📡 Device no registrado');
         });
 
-        // AHORA hacer setup con el token
-        console.log('🔧 Ejecutando device.setup() con token...');
-        console.log('Token length:', token.length);
-        console.log('Token start:', token.substring(0, 30) + '...');
-
-        device.setup(token, {
-          debug: true,
-          codecPreferences: ['opus', 'pcmu'],
-          closeProtection: true
-        });
-
-        console.log('⏳ Setup completado, esperando evento ready...');
+        // Registrar el device
+        console.log('🔧 Registrando device...');
+        await device.register();
+        console.log('⏳ Device registration initiated...');
       } else {
         console.error('❌ Twilio SDK no está cargado');
         alert('Twilio SDK no está cargado. Recarga la página.');
@@ -177,7 +175,11 @@ export default function Home() {
   // Colgar
   const hangup = () => {
     if (activeCall) {
+      console.log('📴 Colgando llamada...');
       activeCall.disconnect();
+    } else if (twilioDevice) {
+      // En SDK 2.x, disconnectAll() desconecta todas las llamadas activas
+      twilioDevice.disconnectAll();
     }
   };
 
