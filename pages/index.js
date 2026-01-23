@@ -11,11 +11,11 @@ export default function Home() {
   const [callStatus, setCallStatus] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
 
-  // Cargar Twilio Client SDK
+  // Cargar Twilio Client SDK v2.x (mejor soporte JWT)
   useEffect(() => {
     console.log('📥 Cargando Twilio SDK...');
     const script = document.createElement('script');
-    script.src = 'https://sdk.twilio.com/js/client/releases/1.14.0/twilio.min.js';
+    script.src = 'https://sdk.twilio.com/js/client/v2.0/twilio.min.js';
     script.async = true;
     script.onload = () => {
       console.log('✅ Twilio SDK cargado correctamente');
@@ -73,15 +73,17 @@ export default function Home() {
 
       const { token } = tokenData;
 
-      // Inicializar Twilio Device v1.14
+      // Inicializar Twilio Device v2.x
       console.log('🔍 Verificando Twilio SDK...', typeof Twilio);
 
       if (typeof Twilio !== 'undefined' && typeof Twilio.Device !== 'undefined') {
         console.log('✅ Twilio SDK disponible');
-        const device = new Twilio.Device();
-        console.log('📱 Twilio Device creado');
 
-        device.on('ready', () => {
+        // En v2.x, Twilio.Device es una función singleton
+        const device = Twilio.Device;
+        console.log('📱 Twilio Device obtenido');
+
+        device.ready(() => {
           console.log('✅ Twilio Device listo');
           setCallStatus('Listo para llamar');
           setTwilioDevice(device);
@@ -89,19 +91,19 @@ export default function Home() {
           loadNextLead();
         });
 
-        device.on('error', (error) => {
+        device.error((error) => {
           console.error('❌ Error Twilio:', error);
           setCallStatus('Error: ' + error.message);
           alert('Error Twilio: ' + error.message);
         });
 
-        device.on('connect', (conn) => {
+        device.connect((conn) => {
           console.log('📞 Llamada conectada');
           setActiveCall(conn);
           setCallStatus('En llamada');
         });
 
-        device.on('disconnect', () => {
+        device.disconnect(() => {
           console.log('📴 Llamada terminada');
           setActiveCall(null);
           setCallStatus('Llamada terminada');
