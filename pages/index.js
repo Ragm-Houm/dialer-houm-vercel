@@ -13,22 +13,36 @@ export default function Home() {
 
   // Cargar Twilio Client SDK
   useEffect(() => {
+    console.log('📥 Cargando Twilio SDK...');
     const script = document.createElement('script');
     script.src = 'https://sdk.twilio.com/js/client/releases/1.14.0/twilio.min.js';
     script.async = true;
+    script.onload = () => {
+      console.log('✅ Twilio SDK cargado correctamente');
+      console.log('Twilio disponible:', typeof Twilio !== 'undefined');
+    };
+    script.onerror = () => {
+      console.error('❌ Error cargando Twilio SDK');
+    };
     document.body.appendChild(script);
 
     return () => {
-      document.body.removeChild(script);
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
     };
   }, []);
 
   // Cargar Caller IDs
   useEffect(() => {
+    console.log('📞 Cargando Caller IDs...');
     fetch('/api/callerids')
       .then(res => res.json())
-      .then(data => setCallerIds(data))
-      .catch(err => console.error('Error cargando Caller IDs:', err));
+      .then(data => {
+        console.log('✅ Caller IDs cargados:', data);
+        setCallerIds(data);
+      })
+      .catch(err => console.error('❌ Error cargando Caller IDs:', err));
   }, []);
 
   // Iniciar sesión
@@ -39,17 +53,33 @@ export default function Home() {
     }
 
     try {
+      console.log('🔄 Iniciando sesión...');
+
       // Obtener token de Twilio
+      console.log('📡 Solicitando token...');
       const tokenRes = await fetch('/api/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: 'ejecutivo@houm.com' })
       });
-      const { token } = await tokenRes.json();
+
+      console.log('Token response status:', tokenRes.status);
+      const tokenData = await tokenRes.json();
+      console.log('Token data:', tokenData);
+
+      if (!tokenRes.ok) {
+        throw new Error(tokenData.error || 'Error al obtener token');
+      }
+
+      const { token } = tokenData;
 
       // Inicializar Twilio Device v1.14
+      console.log('🔍 Verificando Twilio SDK...', typeof Twilio);
+
       if (typeof Twilio !== 'undefined' && typeof Twilio.Device !== 'undefined') {
+        console.log('✅ Twilio SDK disponible');
         const device = new Twilio.Device();
+        console.log('📱 Twilio Device creado');
 
         device.on('ready', () => {
           console.log('✅ Twilio Device listo');
@@ -60,33 +90,37 @@ export default function Home() {
         });
 
         device.on('error', (error) => {
-          console.error('Error Twilio:', error);
+          console.error('❌ Error Twilio:', error);
           setCallStatus('Error: ' + error.message);
+          alert('Error Twilio: ' + error.message);
         });
 
         device.on('connect', (conn) => {
-          console.log('Llamada conectada');
+          console.log('📞 Llamada conectada');
           setActiveCall(conn);
           setCallStatus('En llamada');
         });
 
         device.on('disconnect', () => {
-          console.log('Llamada terminada');
+          console.log('📴 Llamada terminada');
           setActiveCall(null);
           setCallStatus('Llamada terminada');
         });
 
         // Setup con token
+        console.log('🔧 Configurando device con token...');
         device.setup(token, {
           debug: true,
           codecPreferences: ['opus', 'pcmu']
         });
+        console.log('⏳ Esperando evento ready...');
       } else {
+        console.error('❌ Twilio SDK no está cargado');
         alert('Twilio SDK no está cargado. Recarga la página.');
       }
     } catch (error) {
-      console.error('Error iniciando sesión:', error);
-      alert('Error: ' + error.message);
+      console.error('❌ Error iniciando sesión:', error);
+      alert('Error iniciando sesión: ' + error.message);
     }
   };
 
