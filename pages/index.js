@@ -47,37 +47,42 @@ export default function Home() {
       });
       const { token } = await tokenRes.json();
 
-      // Inicializar Twilio Device
-      if (typeof Twilio !== 'undefined') {
-        const device = new Twilio.Device(token);
+      // Inicializar Twilio Device v1.14
+      if (typeof Twilio !== 'undefined' && typeof Twilio.Device !== 'undefined') {
+        const device = new Twilio.Device();
 
-        device.ready(() => {
+        device.on('ready', () => {
           console.log('✅ Twilio Device listo');
           setCallStatus('Listo para llamar');
+          setTwilioDevice(device);
+          setSessionStarted(true);
+          loadNextLead();
         });
 
-        device.error((error) => {
+        device.on('error', (error) => {
           console.error('Error Twilio:', error);
           setCallStatus('Error: ' + error.message);
         });
 
-        device.connect((conn) => {
+        device.on('connect', (conn) => {
           console.log('Llamada conectada');
           setActiveCall(conn);
           setCallStatus('En llamada');
         });
 
-        device.disconnect(() => {
+        device.on('disconnect', () => {
           console.log('Llamada terminada');
           setActiveCall(null);
           setCallStatus('Llamada terminada');
         });
 
-        setTwilioDevice(device);
-        setSessionStarted(true);
-        loadNextLead();
+        // Setup con token
+        device.setup(token, {
+          debug: true,
+          codecPreferences: ['opus', 'pcmu']
+        });
       } else {
-        alert('Twilio SDK no está cargado');
+        alert('Twilio SDK no está cargado. Recarga la página.');
       }
     } catch (error) {
       console.error('Error iniciando sesión:', error);
