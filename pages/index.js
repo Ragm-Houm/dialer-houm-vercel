@@ -99,6 +99,19 @@ export default function Home() {
 
       console.log('🔄 Iniciando sesión...');
 
+      // IMPORTANTE: Solicitar permisos de micrófono primero
+      console.log('🎤 Solicitando permisos de micrófono...');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('✅ Permisos de micrófono concedidos');
+        // Detener el stream temporal, Twilio manejará el audio
+        stream.getTracks().forEach(track => track.stop());
+      } catch (micError) {
+        console.error('❌ Error obteniendo permisos de micrófono:', micError);
+        alert('Debes permitir el acceso al micrófono para usar el dialer. Por favor recarga y acepta los permisos.');
+        return;
+      }
+
       // Obtener token de Twilio
       console.log('📡 Solicitando token...');
       const tokenRes = await fetch('/api/token', {
@@ -127,10 +140,18 @@ export default function Home() {
 
       const device = new DeviceClass(token, {
         edge: 'ashburn',
-        logLevel: 'debug'
+        logLevel: 'debug',
+        // Configuración de audio para WebRTC
+        codecPreferences: ['opus', 'pcmu'],
+        enableIceRestart: true
       });
 
       console.log('Device creado, registrando event listeners...');
+      console.log('🔊 Configurando audio del device...');
+
+      // Configurar el audio del device
+      device.audio.setOutputDevice('default');
+      console.log('✅ Output device configurado');
 
       device.on('registered', () => {
         console.log('✅ Device registrado y listo');
@@ -150,6 +171,9 @@ export default function Home() {
         console.log('📞 Llamada INICIADA (ringing)');
         console.log('Call object:', call);
         console.log('Call status:', call.status());
+        console.log('Call parameters:', call.parameters);
+        console.log('🔊 Audio enabled:', call.isMuted() ? 'MUTED' : 'UNMUTED');
+
         setActiveCall(call);
         activeCallRef.current = call;
         setCallStatus('Llamando...');
@@ -157,7 +181,17 @@ export default function Home() {
         // Evento cuando la llamada es aceptada (answered)
         call.on('accept', () => {
           console.log('✅ Llamada ACEPTADA - En conversación');
-          setCallStatus('En llamada activa');
+          console.log('🔊 Verificando audio...');
+          console.log('  Muted:', call.isMuted());
+          console.log('  Volume:', call.volume || 'default');
+
+          // Asegurar que no esté muteado
+          if (call.isMuted()) {
+            console.log('⚠️ Llamada estaba muteada, desmuteando...');
+            call.mute(false);
+          }
+
+          setCallStatus('En llamada activa - Audio conectado');
         });
 
         // Listeners del objeto Call

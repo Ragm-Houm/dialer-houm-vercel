@@ -36,12 +36,19 @@ export default async function handler(req, res) {
 
   const response = new twilio.twiml.VoiceResponse();
 
-  // Marcar directamente al número del cliente
+  // Para Voice SDK 2.x (WebRTC en navegador):
+  // El ejecutivo ya está conectado desde el navegador vía WebRTC
+  // Solo necesitamos hacer Dial al número destino
+  // El audio fluirá: Navegador <-> Twilio <-> Cliente
+
+  console.log('Generando TwiML para WebRTC call...');
+
   response.dial({
     callerId: callerIdNumber,
     record: 'record-from-answer',
     timeout: 30,
-    action: '/api/call-status'
+    action: '/api/call-status',
+    answerOnBridge: true  // Solo conecta cuando el cliente contesta
   }, destinationNumber);
 
   const twiml = response.toString();
