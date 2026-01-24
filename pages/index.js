@@ -23,6 +23,7 @@ export default function Home() {
     notas: '',
     proximaAccion: ''
   });
+  const [isMuted, setIsMuted] = useState(false);
 
   // Usar ref para mantener la referencia del call activo
   const activeCallRef = useRef(null);
@@ -467,6 +468,17 @@ export default function Home() {
     setShowPostCallForm(false);
     setCallDuration(0);
     loadNextLead();
+  };
+
+  // Silenciar/Desilenciar micrófono
+  const toggleMute = () => {
+    const call = activeCallRef.current || activeCall;
+    if (call) {
+      const newMutedState = !isMuted;
+      call.mute(newMutedState);
+      setIsMuted(newMutedState);
+      console.log(newMutedState ? '🔇 Micrófono silenciado' : '🔊 Micrófono activado');
+    }
   };
 
   // Construir URL de Pipedrive
@@ -960,9 +972,28 @@ export default function Home() {
                       </button>
                     </>
                   ) : (
-                    <button className="btn btn-hangup" onClick={hangup} title="Colgar">
-                      📵
-                    </button>
+                    <>
+                      <button className="btn btn-hangup" onClick={hangup} title="Colgar">
+                        📵
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={toggleMute}
+                        style={{
+                          width: '60px',
+                          height: '60px',
+                          borderRadius: '50%',
+                          fontSize: '24px',
+                          padding: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        title={isMuted ? 'Activar micrófono' : 'Silenciar micrófono'}
+                      >
+                        {isMuted ? '🔇' : '🔊'}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -985,19 +1016,20 @@ export default function Home() {
                 <div style={{maxHeight: '400px', overflowY: 'auto'}}>
                   {callHistory.map((call, index) => (
                     <div key={index} style={{
-                      background: '#f8f9fa',
+                      background: '#2a2a3e',
                       padding: '16px',
                       borderRadius: '8px',
                       marginBottom: '12px',
-                      borderLeft: '4px solid #f9472f'
+                      borderLeft: '4px solid #f9472f',
+                      border: '1px solid #3a3a4e'
                     }}>
                       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
-                        <div style={{fontWeight: '600', color: '#1a1a1a'}}>{call.nombre}</div>
-                        <div style={{fontSize: '13px', color: '#666'}}>
+                        <div style={{fontWeight: '600', color: '#fff'}}>{call.nombre}</div>
+                        <div style={{fontSize: '13px', color: '#a8a8b8'}}>
                           {call.timestamp.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </div>
-                      <div style={{fontSize: '14px', color: '#666'}}>
+                      <div style={{fontSize: '14px', color: '#a8a8b8'}}>
                         {call.telefono} •{' '}
                         <a href={getPipedriveUrl(call.dealId)} target="_blank" rel="noopener noreferrer" style={{color: '#f9472f', textDecoration: 'none'}}>
                           Deal {call.dealId}
