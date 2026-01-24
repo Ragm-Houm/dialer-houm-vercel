@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 
 export default function Home() {
@@ -15,6 +15,9 @@ export default function Home() {
   const [callerIdLoading, setCallerIdLoading] = useState(false);
   const [callerIdError, setCallerIdError] = useState('');
   const [callHistory, setCallHistory] = useState([]);
+
+  // Usar ref para mantener la referencia del call activo
+  const activeCallRef = useRef(null);
 
   // Cargar Twilio Voice SDK 2.x desde archivo local
   useEffect(() => {
@@ -144,14 +147,24 @@ export default function Home() {
       });
 
       device.on('connect', (call) => {
-        console.log('📞 Llamada conectada');
+        console.log('📞 Llamada INICIADA (ringing)');
+        console.log('Call object:', call);
+        console.log('Call status:', call.status());
         setActiveCall(call);
-        setCallStatus('En llamada');
+        activeCallRef.current = call;
+        setCallStatus('Llamando...');
+
+        // Evento cuando la llamada es aceptada (answered)
+        call.on('accept', () => {
+          console.log('✅ Llamada ACEPTADA - En conversación');
+          setCallStatus('En llamada activa');
+        });
 
         // Listeners del objeto Call
         call.on('disconnect', () => {
           console.log('📴 Llamada desconectada');
           setActiveCall(null);
+          activeCallRef.current = null;
           setCallStatus('Llamada terminada - Listo para llamar');
 
           // Agregar a historial
@@ -170,13 +183,20 @@ export default function Home() {
         call.on('cancel', () => {
           console.log('🚫 Llamada cancelada');
           setActiveCall(null);
+          activeCallRef.current = null;
           setCallStatus('Llamada cancelada - Listo para llamar');
         });
 
         call.on('reject', () => {
           console.log('❌ Llamada rechazada');
           setActiveCall(null);
+          activeCallRef.current = null;
           setCallStatus('Llamada rechazada - Listo para llamar');
+        });
+
+        call.on('ringing', () => {
+          console.log('📞 Timbrando...');
+          setCallStatus('Timbrando...');
         });
       });
 
@@ -244,12 +264,41 @@ export default function Home() {
 
   // Colgar
   const hangup = () => {
-    if (activeCall) {
-      console.log('📴 Colgando llamada...');
-      activeCall.disconnect();
+    console.log('🔴 Intentando colgar...');
+    console.log('  activeCall (state):', activeCall);
+    console.log('  activeCall (ref):', activeCallRef.current);
+    console.log('  twilioDevice:', twilioDevice);
+
+    // Intentar con el ref primero
+    const callToDisconnect = activeCallRef.current || activeCall;
+
+    if (callToDisconnect) {
+      console.log('📴 Colgando llamada activa...');
+      console.log('  Call status:', callToDisconnect.status ? callToDisconnect.status() : 'unknown');
+      try {
+        callToDisconnect.disconnect();
+        setActiveCall(null);
+        activeCallRef.current = null;
+        setCallStatus('Llamada terminada - Listo para llamar');
+        console.log('✅ Llamada colgada exitosamente');
+      } catch (error) {
+        console.error('❌ Error al colgar:', error);
+        alert('Error al colgar: ' + error.message);
+      }
     } else if (twilioDevice) {
-      // En SDK 2.x, disconnectAll() desconecta todas las llamadas activas
-      twilioDevice.disconnectAll();
+      console.log('📴 Desconectando todas las llamadas del device...');
+      try {
+        twilioDevice.disconnectAll();
+        setActiveCall(null);
+        activeCallRef.current = null;
+        setCallStatus('Listo para llamar');
+        console.log('✅ Device desconectado');
+      } catch (error) {
+        console.error('❌ Error al desconectar device:', error);
+      }
+    } else {
+      console.log('⚠️ No hay llamada activa ni device para desconectar');
+      alert('No hay llamada activa para colgar');
     }
   };
 
