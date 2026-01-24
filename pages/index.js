@@ -4,7 +4,6 @@ import Head from 'next/head';
 export default function Home() {
   const [pais, setPais] = useState('');
   const [callerId, setCallerId] = useState('');
-  const [callerIds, setCallerIds] = useState([]);
   const [email, setEmail] = useState('');
   const [sdkLoaded, setSdkLoaded] = useState(false);
   const [DeviceClass, setDeviceClass] = useState(null);
@@ -13,6 +12,8 @@ export default function Home() {
   const [activeCall, setActiveCall] = useState(null);
   const [callStatus, setCallStatus] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
+  const [callerIdLoading, setCallerIdLoading] = useState(false);
+  const [callerIdError, setCallerIdError] = useState('');
 
   // Cargar Twilio Voice SDK 2.x desde archivo local
   useEffect(() => {
@@ -44,37 +45,38 @@ export default function Home() {
     };
   }, []);
 
-  // Cargar Caller IDs
-  useEffect(() => {
-    console.log('📞 Cargando Caller IDs...');
-    fetch('/api/callerids')
-      .then(res => res.json())
-      .then(data => {
-        console.log('✅ Caller IDs cargados:', data);
-        setCallerIds(data);
-        // No seleccionar automáticamente, esperar a que se ingrese el email
-      })
-      .catch(err => console.error('❌ Error cargando Caller IDs:', err));
-  }, []);
+  // Ya no necesitamos cargar la lista completa de Caller IDs
+  // El Caller ID se asigna automáticamente basado en el email
 
   // Auto-cargar Caller ID cuando se ingresa el email
   useEffect(() => {
     if (email && email.includes('@')) {
       console.log('📧 Email ingresado, cargando Caller ID asignado...');
+      setCallerIdLoading(true);
+      setCallerIdError('');
+      setCallerId('');
+
       fetch(`/api/ejecutivo-callerid?email=${encodeURIComponent(email)}`)
         .then(res => res.json())
         .then(data => {
+          setCallerIdLoading(false);
           if (data.callerId) {
             console.log('✅ Caller ID asignado:', data.callerId);
             setCallerId(data.callerId);
-          } else {
-            console.log('⚠️ No se encontró Caller ID asignado, usar manual');
+            setCallerIdError('');
+          } else if (data.error) {
+            console.log('❌ Error:', data.error);
+            setCallerIdError(data.error);
           }
         })
         .catch(err => {
-          console.log('⚠️ Error cargando Caller ID del ejecutivo:', err.message);
-          // Silencioso, el usuario puede seleccionar manualmente
+          setCallerIdLoading(false);
+          console.log('❌ Error cargando Caller ID:', err.message);
+          setCallerIdError('Error al cargar Caller ID. Verifica tu email.');
         });
+    } else {
+      setCallerId('');
+      setCallerIdError('');
     }
   }, [email]);
 
@@ -400,21 +402,47 @@ export default function Home() {
                 placeholder="ejecutivo@houm.com"
               />
               <small style={{color: '#666', marginTop: '5px', display: 'block'}}>
-                El Caller ID se cargará automáticamente al ingresar tu email
+                El Caller ID se asignará automáticamente según tu email
               </small>
             </div>
 
-            <div className="form-group">
-              <label>Caller ID {callerId && email && '✅'}</label>
-              <select value={callerId} onChange={(e) => setCallerId(e.target.value)}>
-                <option value="">Selecciona Caller ID</option>
-                {callerIds.map((caller) => (
-                  <option key={caller.phoneNumber} value={caller.phoneNumber}>
-                    {caller.friendlyName} - {caller.phoneNumber}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {email && email.includes('@') && (
+              <div className="form-group">
+                <label>Caller ID asignado</label>
+                {callerIdLoading ? (
+                  <div style={{
+                    padding: '12px',
+                    background: '#f0f0f0',
+                    borderRadius: '6px',
+                    color: '#666'
+                  }}>
+                    🔄 Buscando tu Caller ID...
+                  </div>
+                ) : callerId ? (
+                  <div style={{
+                    padding: '12px',
+                    background: '#e8f5e9',
+                    borderRadius: '6px',
+                    color: '#2e7d32',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    ✅ {callerId}
+                  </div>
+                ) : callerIdError ? (
+                  <div style={{
+                    padding: '12px',
+                    background: '#ffebee',
+                    borderRadius: '6px',
+                    color: '#c62828'
+                  }}>
+                    ❌ {callerIdError}
+                  </div>
+                ) : null}
+              </div>
+            )}
 
             <button className="btn btn-primary" onClick={handleStartSession}>
               Iniciar Sesión
