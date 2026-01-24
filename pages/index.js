@@ -52,14 +52,31 @@ export default function Home() {
       .then(data => {
         console.log('✅ Caller IDs cargados:', data);
         setCallerIds(data);
-        // Seleccionar automáticamente el primer número disponible
-        if (data.length > 0) {
-          setCallerId(data[0].phoneNumber);
-          console.log('✅ Caller ID seleccionado automáticamente:', data[0].phoneNumber);
-        }
+        // No seleccionar automáticamente, esperar a que se ingrese el email
       })
       .catch(err => console.error('❌ Error cargando Caller IDs:', err));
   }, []);
+
+  // Auto-cargar Caller ID cuando se ingresa el email
+  useEffect(() => {
+    if (email && email.includes('@')) {
+      console.log('📧 Email ingresado, cargando Caller ID asignado...');
+      fetch(`/api/ejecutivo-callerid?email=${encodeURIComponent(email)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.callerId) {
+            console.log('✅ Caller ID asignado:', data.callerId);
+            setCallerId(data.callerId);
+          } else {
+            console.log('⚠️ No se encontró Caller ID asignado, usar manual');
+          }
+        })
+        .catch(err => {
+          console.log('⚠️ Error cargando Caller ID del ejecutivo:', err.message);
+          // Silencioso, el usuario puede seleccionar manualmente
+        });
+    }
+  }, [email]);
 
   // Iniciar sesión
   const handleStartSession = async () => {
@@ -127,12 +144,31 @@ export default function Home() {
         console.log('📞 Llamada conectada');
         setActiveCall(call);
         setCallStatus('En llamada');
+
+        // Listeners del objeto Call
+        call.on('disconnect', () => {
+          console.log('📴 Llamada desconectada');
+          setActiveCall(null);
+          setCallStatus('Llamada terminada - Listo para llamar');
+        });
+
+        call.on('cancel', () => {
+          console.log('🚫 Llamada cancelada');
+          setActiveCall(null);
+          setCallStatus('Llamada cancelada - Listo para llamar');
+        });
+
+        call.on('reject', () => {
+          console.log('❌ Llamada rechazada');
+          setActiveCall(null);
+          setCallStatus('Llamada rechazada - Listo para llamar');
+        });
       });
 
       device.on('disconnect', () => {
-        console.log('📴 Llamada terminada');
+        console.log('📴 Device desconectado');
         setActiveCall(null);
-        setCallStatus('Llamada terminada');
+        setCallStatus('Listo para llamar');
       });
 
       device.on('unregistered', () => {
@@ -356,7 +392,20 @@ export default function Home() {
             </div>
 
             <div className="form-group">
-              <label>Caller ID</label>
+              <label>Email ejecutivo</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="ejecutivo@houm.com"
+              />
+              <small style={{color: '#666', marginTop: '5px', display: 'block'}}>
+                El Caller ID se cargará automáticamente al ingresar tu email
+              </small>
+            </div>
+
+            <div className="form-group">
+              <label>Caller ID {callerId && email && '✅'}</label>
               <select value={callerId} onChange={(e) => setCallerId(e.target.value)}>
                 <option value="">Selecciona Caller ID</option>
                 {callerIds.map((caller) => (
@@ -365,16 +414,6 @@ export default function Home() {
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div className="form-group">
-              <label>Email ejecutivo</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="ejecutivo@houm.com"
-              />
             </div>
 
             <button className="btn btn-primary" onClick={handleStartSession}>
