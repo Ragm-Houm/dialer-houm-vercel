@@ -1,5 +1,6 @@
 // API route para generar token de Twilio Client
 const { generateAccessToken } = require('../../lib/twilio');
+const { getEjecutivoInfo } = require('../../lib/sheets');
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -13,12 +14,18 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Email es requerido' });
     }
 
+    const ejecutivo = await getEjecutivoInfo(email);
+    if (!ejecutivo || !ejecutivo.activo) {
+      return res.status(403).json({ error: 'Ejecutivo no autorizado' });
+    }
+
     // Limpiar email para usar como identity
     const identity = email.replace(/[^a-zA-Z0-9]/g, '_');
 
     // Generar token
     const token = generateAccessToken(identity);
 
+    res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({
       token,
       identity

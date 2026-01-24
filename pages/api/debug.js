@@ -2,6 +2,15 @@
 const twilio = require('twilio');
 
 export default async function handler(req, res) {
+  if (process.env.ENABLE_DEBUG_ENDPOINT !== 'true') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  const debugKey = process.env.DEBUG_API_KEY;
+  if (!debugKey || req.headers['x-api-key'] !== debugKey) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   try {
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
     const authToken = process.env.TWILIO_AUTH_TOKEN;

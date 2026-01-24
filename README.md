@@ -30,6 +30,9 @@ TWILIO_TWIML_APP_SID
 PIPEDRIVE_API_TOKEN
 PIPEDRIVE_DOMAIN
 GOOGLE_SHEET_ID
+TWILIO_ALLOWED_CALLER_IDS (opcional, CSV en E.164)
+ENABLE_DEBUG_ENDPOINT (opcional, "true" para habilitar /api/debug)
+DEBUG_API_KEY (requerido si ENABLE_DEBUG_ENDPOINT es "true")
 ```
 
 ### 4. Actualiza TwiML App en Twilio

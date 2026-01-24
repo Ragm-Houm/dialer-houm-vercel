@@ -1,5 +1,5 @@
 // API route para obtener leads
-const { getSiguienteLead } = require('../../lib/sheets');
+const { getSiguienteLead, getEjecutivoInfo } = require('../../lib/sheets');
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -7,10 +7,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { pais } = req.query;
+    const { pais, email } = req.query;
 
-    if (!pais) {
-      return res.status(400).json({ error: 'País es requerido' });
+    if (!pais || !email) {
+      return res.status(400).json({ error: 'País y email son requeridos' });
+    }
+
+    const ejecutivo = await getEjecutivoInfo(email);
+    if (!ejecutivo || !ejecutivo.activo) {
+      return res.status(403).json({ error: 'Ejecutivo no autorizado' });
     }
 
     const lead = await getSiguienteLead(pais);

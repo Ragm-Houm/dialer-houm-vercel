@@ -14,14 +14,14 @@ export default function Home() {
   const [callStatus, setCallStatus] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
 
-  // Cargar Twilio Voice SDK 2.x desde CDN
+  // Cargar Twilio Voice SDK 2.x desde archivo local
   useEffect(() => {
-    console.log('📥 Cargando Twilio Voice SDK 2.x desde CDN...');
+    console.log('📥 Cargando Twilio Voice SDK 2.x...');
     const script = document.createElement('script');
-    script.src = 'https://sdk.twilio.com/js/voice/releases/2.12.0/twilio.min.js';
+    script.src = '/twilio.min.js';  // Archivo local en /public
     script.async = false;
     script.onload = () => {
-      console.log('✅ Twilio Voice SDK cargado desde CDN');
+      console.log('✅ Twilio Voice SDK cargado');
       if (typeof window.Twilio !== 'undefined' && typeof window.Twilio.Device !== 'undefined') {
         setDeviceClass(() => window.Twilio.Device);
         setSdkLoaded(true);
@@ -32,7 +32,7 @@ export default function Home() {
       }
     };
     script.onerror = (e) => {
-      console.error('❌ Error cargando Twilio SDK desde CDN:', e);
+      console.error('❌ Error cargando Twilio SDK:', e);
       setSdkLoaded(false);
     };
     document.head.appendChild(script);
