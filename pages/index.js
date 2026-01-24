@@ -152,7 +152,10 @@ export default function Home() {
         logLevel: 'debug',
         // Configuración de audio para WebRTC
         codecPreferences: ['opus', 'pcmu'],
-        enableIceRestart: true
+        enableIceRestart: true,
+        // Opciones adicionales para mejor experiencia
+        fakeLocalDTMF: true,  // Prevenir eco durante tonos DTMF
+        enableRingingState: true  // Proveer feedback de estado de llamada
       });
 
       console.log('Device creado, registrando event listeners...');
@@ -183,14 +186,10 @@ export default function Home() {
         activeCallRef.current = call;
         setCallStatus('Conectando...');
 
-        // IMPORTANTE: Iniciar timer cuando se conecta (no esperar a accept)
-        // En Voice SDK 2.x, accepted-by-remote significa que la llamada está conectada
-        console.log('🔊 Iniciando timer al conectar...');
-        startCallTimer();
-
         // Evento cuando la llamada es aceptada (answered)
+        // IMPORTANTE: Solo iniciar timer cuando se acepta la llamada
         call.on('accept', () => {
-          console.log('✅ Llamada ACEPTADA - En conversación');
+          console.log('✅ Llamada ACEPTADA - Cliente contestó');
           console.log('🔊 Verificando audio...');
           console.log('  Muted:', call.isMuted());
           console.log('  Volume:', call.volume || 'default');
@@ -201,6 +200,9 @@ export default function Home() {
             call.mute(false);
           }
 
+          // Iniciar timer SOLO cuando el cliente contesta
+          console.log('🔊 Cliente contestó - Iniciando timer...');
+          startCallTimer();
           setCallStatus('En llamada');
         });
 
@@ -248,6 +250,27 @@ export default function Home() {
         call.on('ringing', () => {
           console.log('📞 Timbrando...');
           setCallStatus('Timbrando...');
+        });
+
+        // Evento adicional para detectar cuando se contesta
+        call.on('audio', () => {
+          console.log('🔊 Audio stream iniciado - Llamada conectada');
+          // Si el timer no está corriendo, iniciarlo aquí
+          if (!callTimerRef.current) {
+            console.log('🔊 Iniciando timer en evento audio...');
+            startCallTimer();
+          }
+          setCallStatus('En llamada');
+        });
+
+        // Evento de warning
+        call.on('warning', (warningName, warningData) => {
+          console.log('⚠️ Warning:', warningName, warningData);
+        });
+
+        // Evento de error específico del call
+        call.on('error', (error) => {
+          console.error('❌ Error en call:', error);
         });
       });
 
