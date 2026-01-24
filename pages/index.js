@@ -172,6 +172,11 @@ export default function Home() {
       return;
     }
 
+    console.log('📞 Iniciando llamada...');
+    console.log('  Lead:', currentLead);
+    console.log('  Teléfono:', currentLead.telefono);
+    console.log('  Caller ID:', callerId);
+
     setCallStatus('Llamando...');
 
     const params = {
@@ -179,6 +184,7 @@ export default function Home() {
       From: callerId
     };
 
+    console.log('  Parámetros de llamada:', params);
     twilioDevice.connect(params);
   };
 
