@@ -179,13 +179,16 @@ export default function Home() {
 
     setCallStatus('Llamando...');
 
-    const params = {
-      To: currentLead.telefono,
-      From: callerId
+    // En Voice SDK 2.x, los parámetros personalizados van dentro de 'params'
+    const callParams = {
+      params: {
+        To: currentLead.telefono,
+        From: callerId
+      }
     };
 
-    console.log('  Parámetros de llamada:', params);
-    twilioDevice.connect(params);
+    console.log('  Parámetros de llamada:', callParams);
+    twilioDevice.connect(callParams);
   };
 
   // Colgar
