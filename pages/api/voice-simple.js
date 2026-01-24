@@ -12,9 +12,10 @@ export default async function handler(req, res) {
   }
 
   // En Voice SDK 2.x, los parámetros personalizados vienen directamente en el body
-  // To y From del TwiML request son diferentes a los parámetros que enviamos
-  const destinationNumber = req.body.To || req.body.destinationNumber;
-  const callerIdNumber = req.body.From || req.body.callerIdNumber;
+  // Los parámetros que pasamos en device.connect({ params: { To, From }})
+  // llegan como req.body.To y req.body.From
+  const destinationNumber = req.body.To;
+  const callerIdNumber = req.body.From;
   const { CallSid, AccountSid } = req.body;
 
   console.log('Call Details:');
@@ -43,12 +44,13 @@ export default async function handler(req, res) {
 
   console.log('Generando TwiML para WebRTC call...');
 
+  // Para Voice SDK 2.x (browser WebRTC calls):
+  // No usar answerOnBridge - causa problemas con llamadas desde navegador
   response.dial({
     callerId: callerIdNumber,
     record: 'record-from-answer',
     timeout: 30,
-    action: '/api/call-status',
-    answerOnBridge: true  // Solo conecta cuando el cliente contesta
+    action: '/api/call-status'
   }, destinationNumber);
 
   const twiml = response.toString();
