@@ -14,7 +14,6 @@ export default function Home() {
   const [sessionStarted, setSessionStarted] = useState(false);
   const [callerIdLoading, setCallerIdLoading] = useState(false);
   const [callerIdError, setCallerIdError] = useState('');
-  const [callHistory, setCallHistory] = useState([]);
 
   // Cargar Twilio Voice SDK 2.x desde archivo local
   useEffect(() => {
@@ -153,18 +152,6 @@ export default function Home() {
           console.log('📴 Llamada desconectada');
           setActiveCall(null);
           setCallStatus('Llamada terminada - Listo para llamar');
-
-          // Agregar a historial
-          if (currentLead) {
-            addToHistory({
-              leadId: currentLead.leadId,
-              nombre: currentLead.nombre,
-              telefono: currentLead.telefono,
-              dealId: currentLead.pipedriveDealId,
-              timestamp: new Date(),
-              status: 'completed'
-            });
-          }
         });
 
         call.on('cancel', () => {
@@ -253,16 +240,6 @@ export default function Home() {
     }
   };
 
-  // Agregar al historial
-  const addToHistory = (callData) => {
-    setCallHistory(prev => [callData, ...prev]);
-  };
-
-  // Construir URL de Pipedrive
-  const getPipedriveUrl = (dealId) => {
-    return `https://arriendoasegurado.pipedrive.com/deal/${dealId}`;
-  };
-
   return (
     <>
       <Head>
@@ -283,33 +260,12 @@ export default function Home() {
           padding: 20px;
         }
         .header {
-          background: linear-gradient(135deg, #f9472f 0%, #d93a1f 100%);
+          background: #f9472f;
           color: white;
-          padding: 24px;
-          border-radius: 12px;
-          margin-bottom: 24px;
-          box-shadow: 0 4px 12px rgba(249, 71, 47, 0.2);
-        }
-        .header-content {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-        }
-        .logo {
-          width: 56px;
-          height: 56px;
+          padding: 20px;
           border-radius: 10px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-        }
-        .header-text h1 {
-          font-size: 28px;
-          font-weight: 700;
-          margin: 0 0 4px 0;
-        }
-        .header-text p {
-          font-size: 15px;
-          margin: 0;
-          opacity: 0.95;
+          margin-bottom: 20px;
+          text-align: center;
         }
         .card {
           background: white;
@@ -369,13 +325,6 @@ export default function Home() {
         .btn-danger:hover {
           background: #da190b;
         }
-        .btn-secondary {
-          background: #6c757d;
-          color: white;
-        }
-        .btn-secondary:hover {
-          background: #5a6268;
-        }
         .btn:disabled {
           opacity: 0.5;
           cursor: not-allowed;
@@ -426,17 +375,8 @@ export default function Home() {
 
       <div className="container">
         <div className="header">
-          <div className="header-content">
-            <img
-              src="https://getonbrd-prod.s3.amazonaws.com/uploads/users/logo/8588/Isotipo_Houm_Square_Negativo__1_.jpg"
-              alt="Houm Logo"
-              className="logo"
-            />
-            <div className="header-text">
-              <h1>Dialer Houm</h1>
-              <p>Sistema de marcación automática con Twilio</p>
-            </div>
-          </div>
+          <h1>🎯 Dialer Houm</h1>
+          <p>Sistema de marcación con Twilio Client</p>
         </div>
 
         {!sessionStarted ? (
@@ -521,11 +461,7 @@ export default function Home() {
                     </div>
                     <div className="lead-info-row">
                       <span className="lead-info-label">Deal ID:</span>
-                      <span>
-                        <a href={getPipedriveUrl(currentLead.pipedriveDealId)} target="_blank" rel="noopener noreferrer" style={{color: '#667eea', textDecoration: 'none', borderBottom: '1px dashed #667eea'}}>
-                          {currentLead.pipedriveDealId}
-                        </a>
-                      </span>
+                      <span>{currentLead.pipedriveDealId}</span>
                     </div>
                     <div className="lead-info-row">
                       <span className="lead-info-label">Intentos:</span>
@@ -547,16 +483,16 @@ export default function Home() {
                 <div className="btn-group">
                   {!activeCall ? (
                     <button className="btn btn-success" onClick={makeCall}>
-                      Llamar
+                      📞 Llamar
                     </button>
                   ) : (
                     <button className="btn btn-danger" onClick={hangup}>
-                      Colgar
+                      ❌ Colgar
                     </button>
                   )}
 
-                  <button className="btn btn-secondary" onClick={loadNextLead}>
-                    Siguiente
+                  <button className="btn btn-primary" onClick={loadNextLead}>
+                    ⏭️ Siguiente Lead
                   </button>
                 </div>
               </div>
@@ -568,44 +504,6 @@ export default function Home() {
                 <p>No se encontraron leads pendientes para {pais}</p>
               </div>
             )}
-
-            {/* Historial de llamadas */}
-            <div className="card" style={{marginTop: '24px'}}>
-              <h3 style={{fontSize: '20px', fontWeight: '600', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px'}}>
-                <span>📋</span> Historial de llamadas
-              </h3>
-
-              {callHistory.length > 0 ? (
-                <div style={{maxHeight: '400px', overflowY: 'auto'}}>
-                  {callHistory.map((call, index) => (
-                    <div key={index} style={{
-                      background: '#f8f9fa',
-                      padding: '16px',
-                      borderRadius: '8px',
-                      marginBottom: '12px',
-                      borderLeft: '4px solid #f9472f'
-                    }}>
-                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
-                        <div style={{fontWeight: '600', color: '#1a1a1a'}}>{call.nombre}</div>
-                        <div style={{fontSize: '13px', color: '#666'}}>
-                          {call.timestamp.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                      <div style={{fontSize: '14px', color: '#666'}}>
-                        {call.telefono} •{' '}
-                        <a href={getPipedriveUrl(call.dealId)} target="_blank" rel="noopener noreferrer" style={{color: '#f9472f', textDecoration: 'none'}}>
-                          Deal {call.dealId}
-                        </a>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p style={{textAlign: 'center', color: '#999', padding: '24px 0'}}>
-                  No hay llamadas registradas en esta sesión
-                </p>
-              )}
-            </div>
           </>
         )}
       </div>
