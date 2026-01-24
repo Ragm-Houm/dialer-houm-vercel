@@ -147,11 +147,7 @@ export default function Home() {
       });
 
       console.log('Device creado, registrando event listeners...');
-      console.log('🔊 Configurando audio del device...');
-
-      // Configurar el audio del device
-      device.audio.setOutputDevice('default');
-      console.log('✅ Output device configurado');
+      console.log('🔊 Audio configurado con codecPreferences');
 
       device.on('registered', () => {
         console.log('✅ Device registrado y listo');
