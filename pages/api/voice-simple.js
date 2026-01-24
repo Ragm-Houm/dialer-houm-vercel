@@ -5,24 +5,27 @@ export default async function handler(req, res) {
   console.log('========== VOICE ENDPOINT CALLED ==========');
   console.log('Method:', req.method);
   console.log('Body:', JSON.stringify(req.body, null, 2));
-  console.log('Headers:', JSON.stringify(req.headers, null, 2));
 
   if (req.method !== 'POST') {
     console.log('ERROR: Method not POST');
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { To, From, CallSid, AccountSid } = req.body || {};
+  // En Voice SDK 2.x, los parámetros personalizados vienen directamente en el body
+  // To y From del TwiML request son diferentes a los parámetros que enviamos
+  const destinationNumber = req.body.To || req.body.destinationNumber;
+  const callerIdNumber = req.body.From || req.body.callerIdNumber;
+  const { CallSid, AccountSid } = req.body;
 
   console.log('Call Details:');
-  console.log('  To:', To);
-  console.log('  From:', From);
+  console.log('  Destination Number:', destinationNumber);
+  console.log('  Caller ID Number:', callerIdNumber);
   console.log('  CallSid:', CallSid);
   console.log('  AccountSid:', AccountSid);
 
-  // Validar que To y From existen
-  if (!To || !From) {
-    console.log('ERROR: Missing To or From');
+  // Validar que tenemos los números necesarios
+  if (!destinationNumber || !callerIdNumber) {
+    console.log('ERROR: Missing destination or caller ID');
     const response = new twilio.twiml.VoiceResponse();
     response.say('Sorry, there was an error. Missing phone numbers.');
     const twiml = response.toString();
@@ -35,11 +38,11 @@ export default async function handler(req, res) {
 
   // Marcar directamente al número del cliente
   response.dial({
-    callerId: From,
+    callerId: callerIdNumber,
     record: 'record-from-answer',
     timeout: 30,
     action: '/api/call-status'
-  }, To);
+  }, destinationNumber);
 
   const twiml = response.toString();
   console.log('Generated TwiML:', twiml);
