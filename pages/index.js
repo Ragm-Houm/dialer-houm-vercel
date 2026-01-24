@@ -12,6 +12,7 @@ export default function Home() {
   const [activeCall, setActiveCall] = useState(null);
   const [callStatus, setCallStatus] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
+  const [isCallInProgress, setIsCallInProgress] = useState(false);
   const [callerIdLoading, setCallerIdLoading] = useState(false);
   const [callerIdError, setCallerIdError] = useState('');
   const [callHistory, setCallHistory] = useState([]);
@@ -195,6 +196,7 @@ export default function Home() {
           console.log('📴 Llamada desconectada');
           setActiveCall(null);
           activeCallRef.current = null;
+          setIsCallInProgress(false);
           setCallStatus('Llamada terminada - Listo para llamar');
 
           // Agregar a historial
@@ -214,6 +216,7 @@ export default function Home() {
           console.log('🚫 Llamada cancelada');
           setActiveCall(null);
           activeCallRef.current = null;
+          setIsCallInProgress(false);
           setCallStatus('Llamada cancelada - Listo para llamar');
         });
 
@@ -221,6 +224,7 @@ export default function Home() {
           console.log('❌ Llamada rechazada');
           setActiveCall(null);
           activeCallRef.current = null;
+          setIsCallInProgress(false);
           setCallStatus('Llamada rechazada - Listo para llamar');
         });
 
@@ -279,6 +283,7 @@ export default function Home() {
     console.log('  Caller ID:', callerId);
 
     setCallStatus('Llamando...');
+    setIsCallInProgress(true);
 
     // En Voice SDK 2.x, los parámetros personalizados van dentro de 'params'
     const callParams = {
@@ -298,37 +303,35 @@ export default function Home() {
     console.log('  activeCall (state):', activeCall);
     console.log('  activeCall (ref):', activeCallRef.current);
     console.log('  twilioDevice:', twilioDevice);
+    console.log('  isCallInProgress:', isCallInProgress);
 
-    // Intentar con el ref primero
-    const callToDisconnect = activeCallRef.current || activeCall;
+    // Resetear estados inmediatamente
+    setIsCallInProgress(false);
+    setActiveCall(null);
+    activeCallRef.current = null;
+    setCallStatus('Listo para llamar');
 
-    if (callToDisconnect) {
-      console.log('📴 Colgando llamada activa...');
-      console.log('  Call status:', callToDisconnect.status ? callToDisconnect.status() : 'unknown');
-      try {
+    // Intentar colgar de múltiples formas para asegurar desconexión
+    try {
+      // 1. Intentar con el call activo del ref
+      const callToDisconnect = activeCallRef.current || activeCall;
+      if (callToDisconnect) {
+        console.log('📴 Colgando llamada activa via call.disconnect()...');
         callToDisconnect.disconnect();
-        setActiveCall(null);
-        activeCallRef.current = null;
-        setCallStatus('Llamada terminada - Listo para llamar');
-        console.log('✅ Llamada colgada exitosamente');
-      } catch (error) {
-        console.error('❌ Error al colgar:', error);
-        alert('Error al colgar: ' + error.message);
+        console.log('✅ Call.disconnect() ejecutado');
       }
-    } else if (twilioDevice) {
-      console.log('📴 Desconectando todas las llamadas del device...');
-      try {
+
+      // 2. Intentar desconectar TODAS las llamadas del device
+      if (twilioDevice) {
+        console.log('📴 Ejecutando device.disconnectAll()...');
         twilioDevice.disconnectAll();
-        setActiveCall(null);
-        activeCallRef.current = null;
-        setCallStatus('Listo para llamar');
-        console.log('✅ Device desconectado');
-      } catch (error) {
-        console.error('❌ Error al desconectar device:', error);
+        console.log('✅ Device.disconnectAll() ejecutado');
       }
-    } else {
-      console.log('⚠️ No hay llamada activa ni device para desconectar');
-      alert('No hay llamada activa para colgar');
+
+      console.log('✅ Llamada terminada exitosamente');
+    } catch (error) {
+      console.error('❌ Error al colgar:', error);
+      // No mostrar alert, ya reseteamos los estados
     }
   };
 
@@ -624,7 +627,7 @@ export default function Home() {
                 )}
 
                 <div className="btn-group">
-                  {!activeCall ? (
+                  {!isCallInProgress ? (
                     <button className="btn btn-success" onClick={makeCall}>
                       Llamar
                     </button>
@@ -634,7 +637,7 @@ export default function Home() {
                     </button>
                   )}
 
-                  <button className="btn btn-secondary" onClick={loadNextLead}>
+                  <button className="btn btn-secondary" onClick={loadNextLead} disabled={isCallInProgress}>
                     Siguiente
                   </button>
                 </div>
