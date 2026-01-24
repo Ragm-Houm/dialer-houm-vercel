@@ -16,9 +16,17 @@ export default function Home() {
   const [callerIdLoading, setCallerIdLoading] = useState(false);
   const [callerIdError, setCallerIdError] = useState('');
   const [callHistory, setCallHistory] = useState([]);
+  const [callDuration, setCallDuration] = useState(0);
+  const [showPostCallForm, setShowPostCallForm] = useState(false);
+  const [postCallData, setPostCallData] = useState({
+    resultado: '',
+    notas: '',
+    proximaAccion: ''
+  });
 
   // Usar ref para mantener la referencia del call activo
   const activeCallRef = useRef(null);
+  const callTimerRef = useRef(null);
 
   // Cargar Twilio Voice SDK 2.x desde archivo local
   useEffect(() => {
@@ -188,7 +196,8 @@ export default function Home() {
             call.mute(false);
           }
 
-          setCallStatus('En llamada activa - Audio conectado');
+          setCallStatus('En llamada');
+          startCallTimer(); // Iniciar timer cuando se acepta la llamada
         });
 
         // Listeners del objeto Call
@@ -197,18 +206,16 @@ export default function Home() {
           setActiveCall(null);
           activeCallRef.current = null;
           setIsCallInProgress(false);
-          setCallStatus('Llamada terminada - Listo para llamar');
+          setCallStatus('Llamada terminada');
 
-          // Agregar a historial
-          if (currentLead) {
-            addToHistory({
-              leadId: currentLead.leadId,
-              nombre: currentLead.nombre,
-              telefono: currentLead.telefono,
-              dealId: currentLead.pipedriveDealId,
-              timestamp: new Date(),
-              status: 'completed'
-            });
+          // Mostrar formulario post-llamada solo si hubo conexión (duración > 0)
+          if (callDuration > 0) {
+            console.log('Mostrando formulario post-llamada (duración:', callDuration, 'segundos)');
+            showPostCallFormHandler();
+          } else {
+            console.log('Llamada no conectó, cargando siguiente lead');
+            stopCallTimer();
+            loadNextLead();
           }
         });
 
@@ -217,7 +224,10 @@ export default function Home() {
           setActiveCall(null);
           activeCallRef.current = null;
           setIsCallInProgress(false);
-          setCallStatus('Llamada cancelada - Listo para llamar');
+          stopCallTimer();
+          setCallStatus('Llamada cancelada');
+          // No mostrar formulario si se canceló antes de conectar
+          loadNextLead();
         });
 
         call.on('reject', () => {
@@ -225,7 +235,10 @@ export default function Home() {
           setActiveCall(null);
           activeCallRef.current = null;
           setIsCallInProgress(false);
-          setCallStatus('Llamada rechazada - Listo para llamar');
+          stopCallTimer();
+          setCallStatus('Llamada rechazada');
+          // No mostrar formulario si fue rechazada
+          loadNextLead();
         });
 
         call.on('ringing', () => {
@@ -304,12 +317,15 @@ export default function Home() {
     console.log('  activeCall (ref):', activeCallRef.current);
     console.log('  twilioDevice:', twilioDevice);
     console.log('  isCallInProgress:', isCallInProgress);
+    console.log('  callDuration:', callDuration);
+
+    const hadConnection = callDuration > 0;
 
     // Resetear estados inmediatamente
     setIsCallInProgress(false);
     setActiveCall(null);
     activeCallRef.current = null;
-    setCallStatus('Listo para llamar');
+    setCallStatus('Llamada terminada');
 
     // Intentar colgar de múltiples formas para asegurar desconexión
     try {
@@ -329,15 +345,101 @@ export default function Home() {
       }
 
       console.log('✅ Llamada terminada exitosamente');
+
+      // Mostrar formulario post-llamada si hubo conexión
+      if (hadConnection) {
+        showPostCallFormHandler();
+      } else {
+        stopCallTimer();
+        loadNextLead();
+      }
     } catch (error) {
       console.error('❌ Error al colgar:', error);
-      // No mostrar alert, ya reseteamos los estados
+      stopCallTimer();
+      loadNextLead();
     }
   };
 
   // Agregar al historial
   const addToHistory = (callData) => {
     setCallHistory(prev => [callData, ...prev]);
+  };
+
+  // Iniciar timer de llamada
+  const startCallTimer = () => {
+    setCallDuration(0);
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+    }
+    callTimerRef.current = setInterval(() => {
+      setCallDuration(prev => prev + 1);
+    }, 1000);
+  };
+
+  // Detener timer de llamada
+  const stopCallTimer = () => {
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
+  };
+
+  // Formatear duración en MM:SS
+  const formatDuration = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Mostrar formulario post-llamada
+  const showPostCallFormHandler = () => {
+    stopCallTimer();
+    setShowPostCallForm(true);
+    setPostCallData({
+      resultado: '',
+      notas: '',
+      proximaAccion: ''
+    });
+  };
+
+  // Enviar formulario post-llamada
+  const submitPostCallForm = async () => {
+    if (!postCallData.resultado) {
+      alert('Selecciona un resultado de la llamada');
+      return;
+    }
+
+    console.log('Enviando resultado a Pipedrive/Kommo:', {
+      lead: currentLead,
+      duracion: callDuration,
+      ...postCallData
+    });
+
+    // TODO: Aquí iría la llamada a la API para actualizar Pipedrive/Kommo
+    // Por ahora solo lo registramos en el historial
+    addToHistory({
+      leadId: currentLead?.leadId,
+      nombre: currentLead?.nombre,
+      telefono: currentLead?.telefono,
+      dealId: currentLead?.pipedriveDealId,
+      timestamp: new Date(),
+      duracion: callDuration,
+      resultado: postCallData.resultado,
+      notas: postCallData.notas,
+      status: 'completed'
+    });
+
+    // Cerrar formulario y cargar siguiente lead
+    setShowPostCallForm(false);
+    setCallDuration(0);
+    loadNextLead();
+  };
+
+  // Cancelar formulario post-llamada
+  const cancelPostCallForm = () => {
+    setShowPostCallForm(false);
+    setCallDuration(0);
+    loadNextLead();
   };
 
   // Construir URL de Pipedrive
@@ -350,159 +452,265 @@ export default function Home() {
       <Head>
         <title>Dialer Houm</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
       </Head>
 
       <style jsx>{`
+        * {
+          font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
         body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-          background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+          background: #0f0f1e;
           margin: 0;
           padding: 0;
+          color: #fff;
         }
         .container {
-          max-width: 800px;
+          max-width: 480px;
           margin: 0 auto;
           padding: 20px;
+          min-height: 100vh;
         }
         .header {
           background: linear-gradient(135deg, #f9472f 0%, #d93a1f 100%);
           color: white;
-          padding: 24px;
-          border-radius: 12px;
-          margin-bottom: 24px;
-          box-shadow: 0 4px 12px rgba(249, 71, 47, 0.2);
+          padding: 20px;
+          border-radius: 16px;
+          margin-bottom: 20px;
+          box-shadow: 0 8px 24px rgba(249, 71, 47, 0.3);
         }
         .header-content {
           display: flex;
           align-items: center;
-          gap: 16px;
+          gap: 12px;
         }
         .logo {
-          width: 56px;
-          height: 56px;
-          border-radius: 10px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+          width: 48px;
+          height: 48px;
+          border-radius: 12px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
         .header-text h1 {
-          font-size: 28px;
+          font-size: 22px;
           font-weight: 700;
-          margin: 0 0 4px 0;
+          margin: 0 0 2px 0;
+          letter-spacing: -0.5px;
         }
         .header-text p {
-          font-size: 15px;
+          font-size: 13px;
           margin: 0;
-          opacity: 0.95;
+          opacity: 0.9;
+          font-weight: 400;
         }
         .card {
-          background: white;
-          padding: 30px;
-          border-radius: 10px;
-          box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-          margin-bottom: 20px;
+          background: #1a1a2e;
+          padding: 24px;
+          border-radius: 16px;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+          margin-bottom: 16px;
+          border: 1px solid #2a2a3e;
         }
         .form-group {
-          margin-bottom: 20px;
+          margin-bottom: 18px;
         }
         label {
           display: block;
           margin-bottom: 8px;
-          font-weight: 600;
-          color: #333;
+          font-weight: 500;
+          color: #a8a8b8;
+          font-size: 13px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
-        select, input {
+        select, input, textarea {
           width: 100%;
-          padding: 12px;
-          border: 2px solid #ddd;
-          border-radius: 6px;
-          font-size: 16px;
+          padding: 14px 16px;
+          border: 1px solid #2a2a3e;
+          border-radius: 12px;
+          font-size: 15px;
           box-sizing: border-box;
+          background: #0f0f1e;
+          color: #fff;
+          font-family: 'Poppins', sans-serif;
+          transition: all 0.3s ease;
         }
-        select:focus, input:focus {
+        select:focus, input:focus, textarea:focus {
           outline: none;
           border-color: #f9472f;
+          background: #1a1a2e;
+          box-shadow: 0 0 0 3px rgba(249, 71, 47, 0.1);
+        }
+        textarea {
+          resize: vertical;
+          min-height: 80px;
         }
         .btn {
-          padding: 12px 24px;
+          padding: 14px 28px;
           border: none;
-          border-radius: 6px;
-          font-size: 16px;
+          border-radius: 50px;
+          font-size: 15px;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.3s;
+          transition: all 0.3s ease;
+          font-family: 'Poppins', sans-serif;
+          letter-spacing: 0.3px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
         .btn-primary {
-          background: #f9472f;
+          background: linear-gradient(135deg, #f9472f 0%, #d93a1f 100%);
           color: white;
         }
         .btn-primary:hover {
-          background: #d93a1f;
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(249, 71, 47, 0.4);
         }
-        .btn-success {
-          background: #4caf50;
+        .btn-call {
+          background: linear-gradient(135deg, #00c853 0%, #00a843 100%);
           color: white;
+          width: 72px;
+          height: 72px;
+          border-radius: 50%;
+          padding: 0;
+          font-size: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 8px 24px rgba(0, 200, 83, 0.4);
         }
-        .btn-success:hover {
-          background: #45a049;
+        .btn-call:hover {
+          transform: scale(1.05);
+          box-shadow: 0 12px 32px rgba(0, 200, 83, 0.5);
         }
-        .btn-danger {
-          background: #f44336;
+        .btn-hangup {
+          background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
           color: white;
+          width: 72px;
+          height: 72px;
+          border-radius: 50%;
+          padding: 0;
+          font-size: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 8px 24px rgba(244, 67, 54, 0.4);
+          animation: pulse 2s infinite;
         }
-        .btn-danger:hover {
-          background: #da190b;
+        .btn-hangup:hover {
+          transform: scale(1.05);
+          box-shadow: 0 12px 32px rgba(244, 67, 54, 0.5);
+        }
+        @keyframes pulse {
+          0%, 100% { box-shadow: 0 8px 24px rgba(244, 67, 54, 0.4); }
+          50% { box-shadow: 0 8px 32px rgba(244, 67, 54, 0.6); }
         }
         .btn-secondary {
-          background: #6c757d;
-          color: white;
+          background: #2a2a3e;
+          color: #fff;
+          border: 1px solid #3a3a4e;
         }
         .btn-secondary:hover {
-          background: #5a6268;
+          background: #3a3a4e;
+          transform: translateY(-1px);
         }
         .btn:disabled {
-          opacity: 0.5;
+          opacity: 0.4;
           cursor: not-allowed;
+          transform: none !important;
         }
         .lead-card {
-          background: #f8f9fa;
-          padding: 20px;
-          border-radius: 8px;
+          background: linear-gradient(135deg, #2a2a3e 0%, #1f1f2e 100%);
+          padding: 24px;
+          border-radius: 20px;
           margin-bottom: 20px;
+          border: 1px solid #3a3a4e;
         }
         .lead-name {
-          font-size: 24px;
+          font-size: 26px;
           font-weight: 700;
-          color: #333;
-          margin-bottom: 15px;
+          color: #fff;
+          margin-bottom: 4px;
+          letter-spacing: -0.5px;
+        }
+        .lead-phone {
+          font-size: 16px;
+          color: #f9472f;
+          font-weight: 500;
+          margin-bottom: 16px;
         }
         .lead-info {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 10px;
+          gap: 12px;
+          margin-top: 16px;
         }
-        .lead-info-row {
-          display: flex;
-          justify-content: space-between;
-          padding: 8px 0;
-          border-bottom: 1px solid #ddd;
+        .lead-info-item {
+          background: #0f0f1e;
+          padding: 12px;
+          border-radius: 12px;
+          border: 1px solid #2a2a3e;
         }
         .lead-info-label {
+          font-size: 11px;
+          font-weight: 500;
+          color: #a8a8b8;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 4px;
+        }
+        .lead-info-value {
+          font-size: 15px;
           font-weight: 600;
-          color: #666;
+          color: #fff;
+        }
+        .call-timer {
+          text-align: center;
+          padding: 24px;
+          margin: 24px 0;
+        }
+        .call-timer-value {
+          font-size: 48px;
+          font-weight: 700;
+          color: #f9472f;
+          font-variant-numeric: tabular-nums;
+          letter-spacing: 2px;
         }
         .call-status {
           text-align: center;
-          padding: 15px;
-          background: #e3f2fd;
-          border-radius: 6px;
-          margin: 20px 0;
-          font-size: 18px;
+          padding: 12px 20px;
+          background: linear-gradient(135deg, #2a2a3e 0%, #1f1f2e 100%);
+          border-radius: 50px;
+          margin: 16px 0;
+          font-size: 14px;
           font-weight: 600;
-          color: #1976d2;
+          color: #a8a8b8;
+          border: 1px solid #3a3a4e;
+          letter-spacing: 0.5px;
+        }
+        .call-status.active {
+          background: linear-gradient(135deg, #00c853 0%, #00a843 100%);
+          color: #fff;
+          box-shadow: 0 4px 16px rgba(0, 200, 83, 0.3);
         }
         .btn-group {
           display: flex;
-          gap: 10px;
+          gap: 16px;
           justify-content: center;
+          align-items: center;
+          margin: 24px 0;
+        }
+        .post-call-form {
+          background: linear-gradient(135deg, #2a2a3e 0%, #1f1f2e 100%);
+          padding: 24px;
+          border-radius: 20px;
+          border: 1px solid #3a3a4e;
+        }
+        .post-call-form h3 {
+          margin: 0 0 20px 0;
+          font-size: 20px;
+          font-weight: 600;
+          color: #fff;
         }
       `}</style>
 
@@ -523,15 +731,15 @@ export default function Home() {
 
         {!sessionStarted ? (
           <div className="card">
-            <h2>Iniciar Sesión</h2>
+            <h2 style={{margin: '0 0 24px 0', fontSize: '24px', fontWeight: '600', color: '#fff'}}>Iniciar Sesión</h2>
 
             <div className="form-group">
               <label>País</label>
               <select value={pais} onChange={(e) => setPais(e.target.value)}>
-                <option value="">Selecciona país</option>
-                <option value="CO">🇨🇴 Colombia</option>
-                <option value="MX">🇲🇽 México</option>
-                <option value="CL">🇨🇱 Chile</option>
+                <option value="" style={{background: '#0f0f1e'}}>Selecciona país</option>
+                <option value="CO" style={{background: '#0f0f1e'}}>🇨🇴 Colombia</option>
+                <option value="MX" style={{background: '#0f0f1e'}}>🇲🇽 México</option>
+                <option value="CL" style={{background: '#0f0f1e'}}>🇨🇱 Chile</option>
               </select>
             </div>
 
@@ -543,7 +751,7 @@ export default function Home() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="ejecutivo@houm.com"
               />
-              <small style={{color: '#666', marginTop: '5px', display: 'block'}}>
+              <small style={{color: '#a8a8b8', marginTop: '5px', display: 'block', fontSize: '12px'}}>
                 El Caller ID se asignará automáticamente según tu email
               </small>
             </div>
@@ -553,32 +761,35 @@ export default function Home() {
                 <label>Caller ID asignado</label>
                 {callerIdLoading ? (
                   <div style={{
-                    padding: '12px',
-                    background: '#f0f0f0',
-                    borderRadius: '6px',
-                    color: '#666'
+                    padding: '14px 16px',
+                    background: '#0f0f1e',
+                    borderRadius: '12px',
+                    color: '#a8a8b8',
+                    border: '1px solid #2a2a3e'
                   }}>
                     🔄 Buscando tu Caller ID...
                   </div>
                 ) : callerId ? (
                   <div style={{
-                    padding: '12px',
-                    background: '#e8f5e9',
-                    borderRadius: '6px',
-                    color: '#2e7d32',
-                    fontWeight: 'bold',
+                    padding: '14px 16px',
+                    background: 'linear-gradient(135deg, #00c853 0%, #00a843 100%)',
+                    borderRadius: '12px',
+                    color: '#fff',
+                    fontWeight: '600',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px'
+                    gap: '8px',
+                    boxShadow: '0 4px 12px rgba(0, 200, 83, 0.3)'
                   }}>
                     ✅ {callerId}
                   </div>
                 ) : callerIdError ? (
                   <div style={{
-                    padding: '12px',
-                    background: '#ffebee',
-                    borderRadius: '6px',
-                    color: '#c62828'
+                    padding: '14px 16px',
+                    background: 'linear-gradient(135deg, #f44336 0%, #d32f2f 100%)',
+                    borderRadius: '12px',
+                    color: '#fff',
+                    boxShadow: '0 4px 12px rgba(244, 67, 54, 0.3)'
                   }}>
                     ❌ {callerIdError}
                   </div>
@@ -586,60 +797,146 @@ export default function Home() {
               </div>
             )}
 
-            <button className="btn btn-primary" onClick={handleStartSession}>
+            <button className="btn btn-primary" onClick={handleStartSession} style={{width: '100%', marginTop: '8px'}}>
               Iniciar Sesión
             </button>
           </div>
         ) : (
           <>
-            {currentLead && (
+            {showPostCallForm ? (
+              <div className="card post-call-form">
+                <h3>Resultado de la llamada</h3>
+
+                <div className="form-group">
+                  <label>Duración de llamada</label>
+                  <div style={{
+                    padding: '12px',
+                    background: '#0f0f1e',
+                    borderRadius: '12px',
+                    textAlign: 'center',
+                    fontSize: '24px',
+                    fontWeight: '700',
+                    color: '#f9472f',
+                    border: '1px solid #2a2a3e'
+                  }}>
+                    {formatDuration(callDuration)}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Resultado *</label>
+                  <select
+                    value={postCallData.resultado}
+                    onChange={(e) => setPostCallData({...postCallData, resultado: e.target.value})}
+                  >
+                    <option value="">Selecciona resultado</option>
+                    <option value="contactado">✅ Contactado - Interesado</option>
+                    <option value="contactado_no_interesado">📵 Contactado - No interesado</option>
+                    <option value="no_contesta">❌ No contesta</option>
+                    <option value="buzon">📧 Buzón de voz</option>
+                    <option value="numero_equivocado">⚠️ Número equivocado</option>
+                    <option value="reagendar">📅 Reagendar</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Notas</label>
+                  <textarea
+                    value={postCallData.notas}
+                    onChange={(e) => setPostCallData({...postCallData, notas: e.target.value})}
+                    placeholder="Escribe notas sobre la llamada..."
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Próxima acción</label>
+                  <select
+                    value={postCallData.proximaAccion}
+                    onChange={(e) => setPostCallData({...postCallData, proximaAccion: e.target.value})}
+                  >
+                    <option value="">Selecciona acción</option>
+                    <option value="llamar_manana">Llamar mañana</option>
+                    <option value="llamar_semana">Llamar próxima semana</option>
+                    <option value="enviar_info">Enviar información</option>
+                    <option value="agendar_visita">Agendar visita</option>
+                    <option value="cerrado">Cerrado</option>
+                    <option value="descartado">Descartado</option>
+                  </select>
+                </div>
+
+                <div style={{display: 'flex', gap: '12px', marginTop: '24px'}}>
+                  <button
+                    className="btn btn-primary"
+                    onClick={submitPostCallForm}
+                    style={{flex: 1}}
+                  >
+                    Guardar y Siguiente
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={cancelPostCallForm}
+                  >
+                    Saltar
+                  </button>
+                </div>
+              </div>
+            ) : currentLead && (
               <div className="card">
                 <div className="lead-card">
                   <div className="lead-name">{currentLead.nombre}</div>
+                  <div className="lead-phone">{currentLead.telefono}</div>
+
                   <div className="lead-info">
-                    <div className="lead-info-row">
-                      <span className="lead-info-label">Teléfono:</span>
-                      <span>{currentLead.telefono}</span>
-                    </div>
-                    <div className="lead-info-row">
-                      <span className="lead-info-label">Deal ID:</span>
-                      <span>
-                        <a href={getPipedriveUrl(currentLead.pipedriveDealId)} target="_blank" rel="noopener noreferrer" style={{color: '#667eea', textDecoration: 'none', borderBottom: '1px dashed #667eea'}}>
+                    <div className="lead-info-item">
+                      <div className="lead-info-label">Deal ID</div>
+                      <div className="lead-info-value">
+                        <a href={getPipedriveUrl(currentLead.pipedriveDealId)} target="_blank" rel="noopener noreferrer" style={{color: '#f9472f', textDecoration: 'none'}}>
                           {currentLead.pipedriveDealId}
                         </a>
-                      </span>
+                      </div>
                     </div>
-                    <div className="lead-info-row">
-                      <span className="lead-info-label">Intentos:</span>
-                      <span>{currentLead.intentos}</span>
+                    <div className="lead-info-item">
+                      <div className="lead-info-label">Intentos</div>
+                      <div className="lead-info-value">{currentLead.intentos}</div>
                     </div>
-                    <div className="lead-info-row">
-                      <span className="lead-info-label">País:</span>
-                      <span>{pais}</span>
+                    <div className="lead-info-item">
+                      <div className="lead-info-label">País</div>
+                      <div className="lead-info-value">{pais}</div>
+                    </div>
+                    <div className="lead-info-item">
+                      <div className="lead-info-label">Email</div>
+                      <div className="lead-info-value" style={{fontSize: '12px', wordBreak: 'break-all'}}>{email}</div>
                     </div>
                   </div>
                 </div>
 
+                {isCallInProgress && callDuration > 0 && (
+                  <div className="call-timer">
+                    <div className="call-timer-value">{formatDuration(callDuration)}</div>
+                  </div>
+                )}
+
                 {callStatus && (
-                  <div className="call-status">
+                  <div className={`call-status ${isCallInProgress ? 'active' : ''}`}>
                     {callStatus}
                   </div>
                 )}
 
                 <div className="btn-group">
                   {!isCallInProgress ? (
-                    <button className="btn btn-success" onClick={makeCall}>
-                      Llamar
-                    </button>
+                    <>
+                      <button className="btn btn-call" onClick={makeCall} title="Llamar">
+                        📞
+                      </button>
+                      <button className="btn btn-secondary" onClick={loadNextLead} style={{padding: '12px 24px'}}>
+                        Siguiente Lead
+                      </button>
+                    </>
                   ) : (
-                    <button className="btn btn-danger" onClick={hangup}>
-                      Colgar
+                    <button className="btn btn-hangup" onClick={hangup} title="Colgar">
+                      📵
                     </button>
                   )}
-
-                  <button className="btn btn-secondary" onClick={loadNextLead} disabled={isCallInProgress}>
-                    Siguiente
-                  </button>
                 </div>
               </div>
             )}
