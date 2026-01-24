@@ -173,7 +173,7 @@ export default function Home() {
       });
 
       device.on('connect', (call) => {
-        console.log('📞 Llamada INICIADA (ringing)');
+        console.log('📞 Llamada INICIADA (connect event)');
         console.log('Call object:', call);
         console.log('Call status:', call.status());
         console.log('Call parameters:', call.parameters);
@@ -181,7 +181,12 @@ export default function Home() {
 
         setActiveCall(call);
         activeCallRef.current = call;
-        setCallStatus('Llamando...');
+        setCallStatus('Conectando...');
+
+        // IMPORTANTE: Iniciar timer cuando se conecta (no esperar a accept)
+        // En Voice SDK 2.x, accepted-by-remote significa que la llamada está conectada
+        console.log('🔊 Iniciando timer al conectar...');
+        startCallTimer();
 
         // Evento cuando la llamada es aceptada (answered)
         call.on('accept', () => {
@@ -197,7 +202,6 @@ export default function Home() {
           }
 
           setCallStatus('En llamada');
-          startCallTimer(); // Iniciar timer cuando se acepta la llamada
         });
 
         // Listeners del objeto Call
@@ -319,43 +323,43 @@ export default function Home() {
     console.log('  isCallInProgress:', isCallInProgress);
     console.log('  callDuration:', callDuration);
 
-    const hadConnection = callDuration > 0;
+    // NO resetear estados aquí - dejar que el evento 'disconnect' lo haga
+    // Solo ejecutar disconnect() y el evento se encargará del resto
 
-    // Resetear estados inmediatamente
-    setIsCallInProgress(false);
-    setActiveCall(null);
-    activeCallRef.current = null;
-    setCallStatus('Llamada terminada');
-
-    // Intentar colgar de múltiples formas para asegurar desconexión
     try {
-      // 1. Intentar con el call activo del ref
+      // 1. Intentar con el call activo del ref primero
       const callToDisconnect = activeCallRef.current || activeCall;
       if (callToDisconnect) {
         console.log('📴 Colgando llamada activa via call.disconnect()...');
         callToDisconnect.disconnect();
-        console.log('✅ Call.disconnect() ejecutado');
+        console.log('✅ Call.disconnect() ejecutado - esperando evento disconnect');
+        return; // El evento disconnect se encargará del resto
       }
 
-      // 2. Intentar desconectar TODAS las llamadas del device
+      // 2. Si no hay call, intentar desconectar todas las llamadas del device
       if (twilioDevice) {
         console.log('📴 Ejecutando device.disconnectAll()...');
         twilioDevice.disconnectAll();
         console.log('✅ Device.disconnectAll() ejecutado');
       }
 
-      console.log('✅ Llamada terminada exitosamente');
-
-      // Mostrar formulario post-llamada si hubo conexión
-      if (hadConnection) {
-        showPostCallFormHandler();
-      } else {
-        stopCallTimer();
-        loadNextLead();
-      }
+      // Si llegamos aquí es porque no había call activo
+      // Resetear manualmente
+      console.log('⚠️ No había call activo, reseteando manualmente');
+      setIsCallInProgress(false);
+      setActiveCall(null);
+      activeCallRef.current = null;
+      stopCallTimer();
+      setCallStatus('Listo para llamar');
+      loadNextLead();
     } catch (error) {
       console.error('❌ Error al colgar:', error);
+      // En caso de error, resetear todo
+      setIsCallInProgress(false);
+      setActiveCall(null);
+      activeCallRef.current = null;
       stopCallTimer();
+      setCallStatus('Error al colgar');
       loadNextLead();
     }
   };
