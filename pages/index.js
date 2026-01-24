@@ -51,7 +51,14 @@ export default function Home() {
       .then(res => res.json())
       .then(data => {
         console.log('✅ Caller IDs cargados:', data);
-        setCallerIds(data);
+        // Filtrar solo números de USA (+1) para evitar restricciones
+        const usaNumbers = data.filter(caller => caller.phoneNumber.startsWith('+1'));
+        setCallerIds(usaNumbers);
+        // Seleccionar automáticamente el primer número de USA
+        if (usaNumbers.length > 0) {
+          setCallerId(usaNumbers[0].phoneNumber);
+          console.log('✅ Caller ID seleccionado automáticamente:', usaNumbers[0].phoneNumber);
+        }
       })
       .catch(err => console.error('❌ Error cargando Caller IDs:', err));
   }, []);
