@@ -5,25 +5,35 @@ export default function Home() {
   const [pais, setPais] = useState('');
   const [callerId, setCallerId] = useState('');
   const [callerIds, setCallerIds] = useState([]);
+  const [email, setEmail] = useState('');
+  const [sdkLoaded, setSdkLoaded] = useState(false);
+  const [DeviceClass, setDeviceClass] = useState(null);
   const [currentLead, setCurrentLead] = useState(null);
   const [twilioDevice, setTwilioDevice] = useState(null);
   const [activeCall, setActiveCall] = useState(null);
   const [callStatus, setCallStatus] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
 
-  // Cargar Twilio Voice JavaScript SDK 2.x (soporte completo JWT)
+  // Cargar Twilio Voice SDK 2.x desde CDN
   useEffect(() => {
-    console.log('📥 Cargando Twilio Voice SDK 2.x...');
+    console.log('📥 Cargando Twilio Voice SDK 2.x desde CDN...');
     const script = document.createElement('script');
     script.src = 'https://sdk.twilio.com/js/voice/releases/2.12.0/twilio.min.js';
     script.async = false;
     script.onload = () => {
-      console.log('✅ Twilio Voice SDK cargado');
-      console.log('Twilio disponible:', typeof Twilio !== 'undefined');
-      console.log('Twilio.Device disponible:', typeof Twilio !== 'undefined' && typeof Twilio.Device !== 'undefined');
+      console.log('✅ Twilio Voice SDK cargado desde CDN');
+      if (typeof window.Twilio !== 'undefined' && typeof window.Twilio.Device !== 'undefined') {
+        setDeviceClass(() => window.Twilio.Device);
+        setSdkLoaded(true);
+        console.log('✅ Twilio.Device disponible');
+      } else {
+        console.error('❌ Twilio.Device no está disponible después de cargar el script');
+        setSdkLoaded(false);
+      }
     };
     script.onerror = (e) => {
-      console.error('❌ Error cargando Twilio SDK:', e);
+      console.error('❌ Error cargando Twilio SDK desde CDN:', e);
+      setSdkLoaded(false);
     };
     document.head.appendChild(script);
 
@@ -48,12 +58,17 @@ export default function Home() {
 
   // Iniciar sesión
   const handleStartSession = async () => {
-    if (!pais || !callerId) {
-      alert('Selecciona país y Caller ID');
+    if (!pais || !callerId || !email) {
+      alert('Selecciona país, Caller ID y email');
       return;
     }
 
     try {
+      if (!sdkLoaded || !DeviceClass) {
+        alert('Twilio SDK no está cargado. Recarga la página.');
+        return;
+      }
+
       console.log('🔄 Iniciando sesión...');
 
       // Obtener token de Twilio
@@ -61,7 +76,7 @@ export default function Home() {
       const tokenRes = await fetch('/api/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'ejecutivo@houm.com' })
+        body: JSON.stringify({ email })
       });
 
       console.log('Token response status:', tokenRes.status);
@@ -75,64 +90,54 @@ export default function Home() {
       const { token } = tokenData;
 
       // Inicializar Twilio Voice SDK 2.x
-      console.log('🔍 Verificando Twilio SDK...', typeof Twilio);
+      // Esperar un momento para asegurar que SDK esté listo
+      await new Promise(resolve => setTimeout(resolve, 200));
 
-      if (typeof Twilio !== 'undefined' && typeof Twilio.Device !== 'undefined') {
-        console.log('✅ Twilio Voice SDK disponible');
+      // En SDK 2.x, crear Device CON el token directamente
+      console.log('📱 Creando Twilio Device con token...');
+      console.log('Token length:', token.length);
 
-        // Esperar un momento para asegurar que SDK esté listo
-        await new Promise(resolve => setTimeout(resolve, 200));
+      const device = new DeviceClass(token, {
+        edge: 'ashburn',
+        logLevel: 'debug'
+      });
 
-        // En SDK 2.x, crear Device CON el token directamente
-        console.log('📱 Creando Twilio Device con token...');
-        console.log('Token length:', token.length);
+      console.log('Device creado, registrando event listeners...');
 
-        const device = new Twilio.Device(token, {
-          codecPreferences: [Twilio.Device.CodecName.Opus, Twilio.Device.CodecName.PCMU],
-          edge: 'ashburn',
-          logLevel: 'debug'
-        });
+      device.on('registered', () => {
+        console.log('✅ Device registrado y listo');
+        setCallStatus('Listo para llamar');
+        setTwilioDevice(device);
+        setSessionStarted(true);
+        loadNextLead();
+      });
 
-        console.log('Device creado, registrando event listeners...');
+      device.on('error', (error) => {
+        console.error('❌ Error Twilio:', error);
+        setCallStatus('Error: ' + (error.message || 'Unknown error'));
+        alert('Error Twilio: ' + (error.message || 'Unknown error'));
+      });
 
-        device.on('registered', () => {
-          console.log('✅ Device registrado y listo');
-          setCallStatus('Listo para llamar');
-          setTwilioDevice(device);
-          setSessionStarted(true);
-          loadNextLead();
-        });
+      device.on('connect', (call) => {
+        console.log('📞 Llamada conectada');
+        setActiveCall(call);
+        setCallStatus('En llamada');
+      });
 
-        device.on('error', (error) => {
-          console.error('❌ Error Twilio:', error);
-          setCallStatus('Error: ' + (error.message || 'Unknown error'));
-          alert('Error Twilio: ' + (error.message || 'Unknown error'));
-        });
+      device.on('disconnect', () => {
+        console.log('📴 Llamada terminada');
+        setActiveCall(null);
+        setCallStatus('Llamada terminada');
+      });
 
-        device.on('connect', (call) => {
-          console.log('📞 Llamada conectada');
-          setActiveCall(call);
-          setCallStatus('En llamada');
-        });
+      device.on('unregistered', () => {
+        console.log('📡 Device no registrado');
+      });
 
-        device.on('disconnect', () => {
-          console.log('📴 Llamada terminada');
-          setActiveCall(null);
-          setCallStatus('Llamada terminada');
-        });
-
-        device.on('unregistered', () => {
-          console.log('📡 Device no registrado');
-        });
-
-        // Registrar el device
-        console.log('🔧 Registrando device...');
-        await device.register();
-        console.log('⏳ Device registration initiated...');
-      } else {
-        console.error('❌ Twilio SDK no está cargado');
-        alert('Twilio SDK no está cargado. Recarga la página.');
-      }
+      // Registrar el device
+      console.log('🔧 Registrando device...');
+      await device.register();
+      console.log('⏳ Device registration initiated...');
     } catch (error) {
       console.error('❌ Error iniciando sesión:', error);
       alert('Error iniciando sesión: ' + error.message);
@@ -142,7 +147,7 @@ export default function Home() {
   // Cargar siguiente lead
   const loadNextLead = async () => {
     try {
-      const res = await fetch(`/api/leads?pais=${pais}`);
+      const res = await fetch(`/api/leads?pais=${pais}&email=${encodeURIComponent(email)}`);
       if (res.ok) {
         const lead = await res.json();
         setCurrentLead(lead);
@@ -346,6 +351,16 @@ export default function Home() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="form-group">
+              <label>Email ejecutivo</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="ejecutivo@houm.com"
+              />
             </div>
 
             <button className="btn btn-primary" onClick={handleStartSession}>
