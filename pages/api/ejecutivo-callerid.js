@@ -1,24 +1,41 @@
 // API route para obtener el Caller ID asignado a un ejecutivo
 // Busca en los Verified Caller IDs de Twilio por el friendly name (email)
 const { getCallerIds } = require('../../lib/twilio');
-const { getEjecutivoInfo } = require('../../lib/sheets');
+const { getEjecutivoInfo } = require('../../lib/supabase');
+const { requireUser } = require('../../lib/auth');
+const { getCredentials } = require('../../lib/session-cookie');
+const { requireRateLimit } = require('../../lib/rate-limit');
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  try {
-    const { email } = req.query;
+  // Rate limiting
+  if (!requireRateLimit(req, res, 'api')) {
+    return;
+  }
 
-    if (!email) {
-      return res.status(400).json({ error: 'Email es requerido' });
+  try {
+    // Obtener credenciales de cookies (preferido) o query params (legacy)
+    const creds = getCredentials(req);
+    const email = creds?.email || req.query.email;
+    const idToken = creds?.idToken || req.query.idToken;
+
+    if (!email || !idToken) {
+      return res.status(401).json({ error: 'No autorizado' });
     }
 
-    console.log('Buscando Caller ID para email:', email);
+    const auth = await requireUser({ email, idToken });
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+    const verifiedEmail = auth.user.email;
+
+    console.log('Buscando Caller ID para email:', verifiedEmail);
 
     // Verificar que el ejecutivo esté activo
-    const ejecutivo = await getEjecutivoInfo(email);
+    const ejecutivo = await getEjecutivoInfo(verifiedEmail);
     if (!ejecutivo) {
       return res.status(404).json({ error: 'Ejecutivo no encontrado en Google Sheets' });
     }
@@ -35,7 +52,7 @@ export default async function handler(req, res) {
     const callerIdMatch = callerIds.find(caller => {
       // Comparar friendly name con el email (case insensitive)
       const friendlyName = (caller.friendlyName || '').toLowerCase();
-      const emailLower = email.toLowerCase();
+      const emailLower = verifiedEmail.toLowerCase();
 
       console.log(`Comparando: "${friendlyName}" con "${emailLower}"`);
 
@@ -53,7 +70,7 @@ export default async function handler(req, res) {
     console.log('✅ Caller ID encontrado:', callerIdMatch.phoneNumber);
 
     res.status(200).json({
-      email: email,
+      email: verifiedEmail,
       callerId: callerIdMatch.phoneNumber,
       friendlyName: callerIdMatch.friendlyName
     });

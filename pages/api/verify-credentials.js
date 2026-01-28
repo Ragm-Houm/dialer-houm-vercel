@@ -1,7 +1,19 @@
 // Endpoint para verificar credenciales de Twilio
+// PROTEGIDO: requiere DEBUG habilitado y API key
 const twilio = require('twilio');
 
 export default async function handler(req, res) {
+  // Solo permitir si DEBUG está habilitado (igual que debug.js)
+  if (process.env.ENABLE_DEBUG_ENDPOINT !== 'true') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  // Requiere API key para acceso
+  const debugKey = process.env.DEBUG_API_KEY;
+  if (!debugKey || req.headers['x-api-key'] !== debugKey) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   try {
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
     const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -88,18 +100,8 @@ export default async function handler(req, res) {
       const jwt = token.toJwt();
 
       results.tokenGeneration = {
-        success: true,
-        tokenLength: jwt.length,
-        tokenPreview: jwt.substring(0, 50) + '...'
-      };
-
-      // Decodificar payload
-      const payload = JSON.parse(Buffer.from(jwt.split('.')[1], 'base64').toString());
-      results.tokenPayload = {
-        iss: payload.iss,
-        sub: payload.sub,
-        identity: payload.grants?.identity,
-        hasVoiceGrant: !!payload.grants?.voice
+        success: true
+        // No exponemos detalles del token por seguridad
       };
     } catch (e) {
       results.tokenGeneration = {

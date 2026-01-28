@@ -67,11 +67,8 @@ export default async function handler(req, res) {
       token.addGrant(voiceGrant);
       const jwt = token.toJwt();
 
-      checks.tokenGeneration = 'SUCCESS (length: ' + jwt.length + ')';
-
-      // Intentar decodificar el token para ver su contenido
-      const decoded = Buffer.from(jwt.split('.')[1], 'base64').toString();
-      checks.tokenPayload = JSON.parse(decoded);
+      checks.tokenGeneration = 'SUCCESS';
+      // No exponemos el payload del JWT por seguridad
     } catch (e) {
       checks.tokenGeneration = 'ERROR: ' + e.message;
     }
