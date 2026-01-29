@@ -7,7 +7,7 @@
  */
 
 const { requireUser } = require('../../../lib/auth');
-const { getEjecutivoInfo } = require('../../../lib/supabase');
+const { getEjecutivoInfo, getUserByEmail } = require('../../../lib/supabase');
 const { requireCsrf } = require('../../../lib/csrf');
 const { requireRateLimit } = require('../../../lib/rate-limit');
 const {
@@ -23,30 +23,30 @@ export default async function handler(req, res) {
     try {
       const session = getSessionFromCookies(req);
 
-      if (!session) {
+      if (!session || !session.email) {
         return res.status(200).json({ ok: false, session: null });
       }
 
-      // Validar que el token siga siendo válido
-      const auth = await requireUser({ email: session.email, idToken: session.idToken });
+      // Validar que el usuario exista y esté activo en Supabase
+      // NO revalidar el Google ID Token (expira en 1hr, la sesión dura 24hr)
+      const user = await getUserByEmail(session.email).catch(() => null);
 
-      if (!auth.ok) {
-        // Token expirado o inválido, limpiar cookies
+      if (!user || !user.activo) {
         clearSessionCookies(res);
-        return res.status(200).json({ ok: false, session: null, reason: 'token_expired' });
+        return res.status(200).json({ ok: false, session: null, reason: 'user_inactive' });
       }
 
       // Obtener info actualizada del ejecutivo
-      const ejecutivo = await getEjecutivoInfo(auth.user.email).catch(() => null);
+      const ejecutivo = await getEjecutivoInfo(session.email).catch(() => null);
 
       return res.status(200).json({
         ok: true,
         session: {
-          email: auth.user.email,
-          role: auth.user.role,
-          country: auth.user.country,
-          picture: auth.google?.picture || session.picture,
-          name: auth.google?.name || session.name
+          email: user.email,
+          role: user.role || session.role || 'ejecutivo',
+          country: user.country || session.country || '',
+          picture: session.picture || '',
+          name: session.name || ''
         },
         ejecutivo
       });
