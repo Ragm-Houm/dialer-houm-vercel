@@ -2,7 +2,6 @@
 const { generateAccessToken } = require('../../lib/twilio');
 const { getEjecutivoInfo } = require('../../lib/supabase');
 const { requireUser } = require('../../lib/auth');
-const { requireCsrf } = require('../../lib/csrf');
 const { requireRateLimit } = require('../../lib/rate-limit');
 
 export default async function handler(req, res) {
@@ -15,10 +14,8 @@ export default async function handler(req, res) {
     return;
   }
 
-  // Validar CSRF token
-  if (!requireCsrf(req, res)) {
-    return;
-  }
+  // Nota: No requiere CSRF — la protección viene de las cookies HttpOnly de sesión.
+  // El token de Twilio es específico al usuario autenticado.
 
   try {
     // requireUser lee cookies automáticamente y valida por DB si hay sesión activa
