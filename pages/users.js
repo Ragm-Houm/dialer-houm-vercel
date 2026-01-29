@@ -23,7 +23,7 @@ export default function UsersPage() {
   const [targetActive, setTargetActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const router = useRouter();
-  const { session, isSessionReady, sessionError, clearSession } = useSession();
+  const { session, isSessionReady, sessionError, clearSession, csrfFetch } = useSession();
 
   const sortedUsers = useMemo(
     () => [...users].sort((a, b) => String(a.email).localeCompare(String(b.email))),
@@ -112,7 +112,7 @@ export default function UsersPage() {
   }, [isSessionReady, session, sessionError, router]);
   const reload = async () => {
     if (!email || !idToken) return;
-    const res = await fetch(`/api/users?email=${encodeURIComponent(email)}&idToken=${encodeURIComponent(idToken)}`);
+    const res = await csrfFetch(`/api/users?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' });
     const data = await res.json();
     if (res.ok) setUsers(data.users || []);
   };
@@ -121,12 +121,12 @@ export default function UsersPage() {
     if (!email || !idToken || !targetEmail || !targetCountry) return;
     try {
       setSaving(true);
-      const res = await fetch('/api/users', {
+      const res = await csrfFetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({
           email,
-          idToken,
           targetEmail,
           role: targetRole,
           country: targetCountry,

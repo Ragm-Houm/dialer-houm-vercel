@@ -347,7 +347,7 @@ export default function ReviewPage() {
     { value: 'otro', label: 'Otro' }
   ];
   const router = useRouter();
-  const { session, isSessionReady, sessionError, clearSession } = useSession();
+  const { session, isSessionReady, sessionError, clearSession, csrfFetch } = useSession();
   const [authError, setAuthError] = useState('');
   const [email, setEmail] = useState('');
   const [idToken, setIdToken] = useState('');
@@ -695,7 +695,7 @@ export default function ReviewPage() {
         .filter((user) => user.activo !== false && user.role === 'ejecutivo' && user.country === wizardCountry)
         .map((user) => String(user.email).toLowerCase());
 
-      const pdRes = await fetch('/api/pipedrive-users');
+      const pdRes = await csrfFetch('/api/pipedrive-users');
       const pdData = await pdRes.json();
       if (!pdRes.ok) {
         setWizardOwnerOptions([]);
@@ -829,7 +829,7 @@ export default function ReviewPage() {
       if (expired.length > 0) {
         await Promise.all(
           expired.map((campaign) =>
-            fetch('/api/campaigns', {
+            csrfFetch('/api/campaigns', {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1053,7 +1053,7 @@ export default function ReviewPage() {
         wizardSource === 'manual' ? 'Creando campaña desde archivo...' : 'Creando campaña en Pipedrive...';
       setWizardCreateStatus(creatingLabel);
       setWizardCreateLogs((prev) => [...prev, 'Creando campaña...']);
-      const res = await fetch('/api/campaign-create', {
+      const res = await csrfFetch('/api/campaign-create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1112,7 +1112,7 @@ export default function ReviewPage() {
       return;
     }
     try {
-      await fetch('/api/campaigns', {
+      await csrfFetch('/api/campaigns', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1138,7 +1138,7 @@ export default function ReviewPage() {
     const closeTz = TIMEZONES[reactivateCampaign.country] || 'America/Bogota';
     const closeAt = reactivateNoLimit ? null : computeCloseAtFromPreset(reactivatePreset, closeTz);
     try {
-      const res = await fetch('/api/campaigns', {
+      const res = await csrfFetch('/api/campaigns', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1185,7 +1185,7 @@ export default function ReviewPage() {
     const confirmed = window.confirm('¿Eliminar esta campaña? Se borrarán también sus leads asociados.');
     if (!confirmed) return;
     try {
-      const res = await fetch('/api/campaigns', {
+      const res = await csrfFetch('/api/campaigns', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ campaignKey, email, idToken })
@@ -1207,7 +1207,7 @@ export default function ReviewPage() {
   const createOutcome = async () => {
     if (!newOutcomeLabel.trim()) return;
     try {
-      const res = await fetch('/api/outcomes', {
+      const res = await csrfFetch('/api/outcomes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1235,7 +1235,7 @@ export default function ReviewPage() {
 
   const deleteOutcome = async (id) => {
     try {
-      const res = await fetch('/api/outcomes', {
+      const res = await csrfFetch('/api/outcomes', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1258,7 +1258,7 @@ export default function ReviewPage() {
 
   const updateOutcome = async (outcomeId, updates) => {
     try {
-      const res = await fetch('/api/outcomes', {
+      const res = await csrfFetch('/api/outcomes', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

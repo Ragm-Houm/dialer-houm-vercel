@@ -36,7 +36,7 @@ export default function MetricsPage() {
     activeSeconds: 0
   });
   const router = useRouter();
-  const { session, isSessionReady, sessionError, clearSession } = useSession();
+  const { session, isSessionReady, sessionError, clearSession, csrfFetch } = useSession();
 
   const topCampaigns = useMemo(() => (Array.isArray(campaigns) ? campaigns.slice(0, 6) : []), [campaigns]);
   const topUsers = useMemo(() => (Array.isArray(users) ? users.slice(0, 12) : []), [users]);
@@ -135,8 +135,9 @@ export default function MetricsPage() {
   const loadMetrics = async (userEmail, token) => {
     try {
       setLoading(true);
-      const res = await fetch(
-        `/api/metrics-campaigns?email=${encodeURIComponent(userEmail)}&idToken=${encodeURIComponent(token)}&dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`
+      const res = await csrfFetch(
+        `/api/metrics-campaigns?email=${encodeURIComponent(userEmail)}&dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`,
+        { credentials: 'same-origin' }
       );
       const data = await res.json();
       if (!res.ok) {
