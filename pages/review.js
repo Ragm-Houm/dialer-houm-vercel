@@ -138,10 +138,10 @@ function formatCountdown(closeAt) {
 function isAgeBarActive(filter, label) {
   if (!filter || !label) return false;
   if (filter === 'all') return true;
-  if (filter === 'lt7') return label.includes('< 7');
-  if (filter === 'between7_15') return label.includes('> 7') || label.includes('< 15');
-  if (filter === 'between15_30') return label.includes('> 15') || label.includes('< 30');
-  if (filter === 'gt30') return label.includes('> 30');
+  if (filter === 'lt7') return label.includes('0 –');
+  if (filter === 'between7_15') return label.includes('7 –');
+  if (filter === 'between15_30') return label.includes('16 –');
+  if (filter === 'gt30') return label.includes('31+');
   return false;
 }
 
@@ -290,10 +290,8 @@ function buildManualPreview(rows) {
   let withoutValid = 0;
   const ageBuckets = {
     lt7: 0,
-    gt7: 0,
-    lt15: 0,
-    gt15: 0,
-    lt30: 0,
+    between7_15: 0,
+    between15_30: 0,
     gt30: 0
   };
 
@@ -312,11 +310,9 @@ function buildManualPreview(rows) {
       const diffMs = Date.now() - dt.getTime();
       const ageDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
       if (ageDays < 7) ageBuckets.lt7 += 1;
-      if (ageDays >= 7 && ageDays <= 15) ageBuckets.gt7 += 1;
-      if (ageDays < 15) ageBuckets.lt15 += 1;
-      if (ageDays > 15) ageBuckets.gt15 += 1;
-      if (ageDays < 30) ageBuckets.lt30 += 1;
-      if (ageDays > 30) ageBuckets.gt30 += 1;
+      else if (ageDays <= 15) ageBuckets.between7_15 += 1;
+      else if (ageDays <= 30) ageBuckets.between15_30 += 1;
+      else ageBuckets.gt30 += 1;
     }
   });
 
@@ -902,12 +898,10 @@ export default function ReviewPage() {
   const wizardAgeStats = useMemo(() => {
     if (!wizardPreview?.ageBuckets) return [];
     return [
-      { label: '< 7 dias', value: wizardPreview.ageBuckets.lt7 },
-      { label: '> 7 dias', value: wizardPreview.ageBuckets.gt7 },
-      { label: '< 15 dias', value: wizardPreview.ageBuckets.lt15 },
-      { label: '> 15 dias', value: wizardPreview.ageBuckets.gt15 },
-      { label: '< 30 dias', value: wizardPreview.ageBuckets.lt30 },
-      { label: '> 30 dias', value: wizardPreview.ageBuckets.gt30 }
+      { label: '0 – 6 dias', value: wizardPreview.ageBuckets.lt7 },
+      { label: '7 – 15 dias', value: wizardPreview.ageBuckets.between7_15 },
+      { label: '16 – 30 dias', value: wizardPreview.ageBuckets.between15_30 },
+      { label: '31+ dias', value: wizardPreview.ageBuckets.gt30 }
     ];
   }, [wizardPreview]);
 
@@ -920,9 +914,9 @@ export default function ReviewPage() {
       case 'lt7':
         return buckets.lt7 || 0;
       case 'between7_15':
-        return (buckets.gt7 || 0) + (buckets.lt15 || 0);
+        return buckets.between7_15 || 0;
       case 'between15_30':
-        return (buckets.gt15 || 0) + (buckets.lt30 || 0);
+        return buckets.between15_30 || 0;
       case 'gt30':
         return buckets.gt30 || 0;
       default:

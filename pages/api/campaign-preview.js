@@ -194,10 +194,8 @@ export default async function handler(req, res) {
     let blockedActive = 0;
     const ageBuckets = {
       lt7: 0,
-      gt7: 0,
-      lt15: 0,
-      gt15: 0,
-      lt30: 0,
+      between7_15: 0,
+      between15_30: 0,
       gt30: 0
     };
 
@@ -218,11 +216,9 @@ export default async function handler(req, res) {
       }
       if (row.ageDays !== null) {
         if (row.ageDays < 7) ageBuckets.lt7 += 1;
-        if (row.ageDays >= 7 && row.ageDays <= 15) ageBuckets.gt7 += 1;
-        if (row.ageDays < 15) ageBuckets.lt15 += 1;
-        if (row.ageDays > 15) ageBuckets.gt15 += 1;
-        if (row.ageDays < 30) ageBuckets.lt30 += 1;
-        if (row.ageDays > 30) ageBuckets.gt30 += 1;
+        else if (row.ageDays <= 15) ageBuckets.between7_15 += 1;
+        else if (row.ageDays <= 30) ageBuckets.between15_30 += 1;
+        else ageBuckets.gt30 += 1;
       }
     });
 
