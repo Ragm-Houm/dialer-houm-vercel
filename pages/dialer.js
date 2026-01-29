@@ -3369,6 +3369,11 @@ export default function Home() {
           border: 1px dashed var(--border);
           font-size: 11px;
           padding: 8px 12px;
+          box-shadow: none;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
         }
         .btn-ghost:hover {
           color: var(--text-primary);
