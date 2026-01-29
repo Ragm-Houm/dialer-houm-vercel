@@ -135,15 +135,6 @@ function formatCountdown(closeAt) {
   return `${days}d ${hours}h ${mins}m`;
 }
 
-function isAgeBarActive(filter, label) {
-  if (!filter || !label) return false;
-  if (filter === 'all') return true;
-  if (filter === 'lt7') return label.includes('0 –');
-  if (filter === 'between7_15') return label.includes('7 –');
-  if (filter === 'between15_30') return label.includes('16 –');
-  if (filter === 'gt30') return label.includes('31+');
-  return false;
-}
 
 const MANUAL_SOURCE_OPTIONS = [
   { value: 'auto', label: 'Automatica (Pipedrive)' },
@@ -898,10 +889,10 @@ export default function ReviewPage() {
   const wizardAgeStats = useMemo(() => {
     if (!wizardPreview?.ageBuckets) return [];
     return [
-      { label: '0 – 6 dias', value: wizardPreview.ageBuckets.lt7 },
-      { label: '7 – 15 dias', value: wizardPreview.ageBuckets.between7_15 },
-      { label: '16 – 30 dias', value: wizardPreview.ageBuckets.between15_30 },
-      { label: '31+ dias', value: wizardPreview.ageBuckets.gt30 }
+      { label: '0 – 6 dias', value: wizardPreview.ageBuckets.lt7, filter: 'lt7' },
+      { label: '7 – 15 dias', value: wizardPreview.ageBuckets.between7_15, filter: 'between7_15' },
+      { label: '16 – 30 dias', value: wizardPreview.ageBuckets.between15_30, filter: 'between15_30' },
+      { label: '31+ dias', value: wizardPreview.ageBuckets.gt30, filter: 'gt30' }
     ];
   }, [wizardPreview]);
 
@@ -1898,23 +1889,26 @@ export default function ReviewPage() {
                 )}
                 {wizardAgeStats.length > 0 && (
                   <div className="age-chart">
-                    {wizardAgeStats.map((stat) => (
-                      <div
-                        key={stat.label}
-                        className={`age-row ${isAgeBarActive(wizardAgeFilter, stat.label) ? 'active' : ''}`}
-                      >
-                        <div className="age-label">{stat.label}</div>
-                        <div className="age-bar">
-                          <div
-                            className="age-fill"
-                            style={{
-                              width: `${wizardPreview && wizardPreview.total ? (stat.value / wizardPreview.total) * 100 : 0}%`
-                            }}
-                          />
+                    {wizardAgeStats.map((stat) => {
+                      const isActive = wizardAgeFilter === 'all' || wizardAgeFilter === stat.filter;
+                      return (
+                        <div
+                          key={stat.label}
+                          className={`age-row ${isActive ? 'active' : ''}`}
+                        >
+                          <div className="age-label">{stat.label}</div>
+                          <div className="age-bar">
+                            <div
+                              className="age-fill"
+                              style={{
+                                width: `${wizardPreview && wizardPreview.total ? (stat.value / wizardPreview.total) * 100 : 0}%`
+                              }}
+                            />
+                          </div>
+                          <div className="age-value">{stat.value}</div>
                         </div>
-                        <div className="age-value">{stat.value}</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -2904,9 +2898,14 @@ export default function ReviewPage() {
         }
         .age-row {
           display: grid;
-          grid-template-columns: 90px 1fr 48px;
+          grid-template-columns: 100px 1fr 48px;
           align-items: center;
           gap: 10px;
+          opacity: 0.35;
+          transition: opacity 0.2s ease;
+        }
+        .age-row.active {
+          opacity: 1;
         }
         .age-row.active .age-fill {
           background: linear-gradient(135deg, var(--accent), var(--accent-strong));
