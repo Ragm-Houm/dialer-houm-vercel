@@ -49,17 +49,19 @@ export default async function handler(req, res) {
       return friendlyName === emailLower;
     });
 
+    // Siempre devolver la lista completa para que el usuario pueda cambiar
+    const allCallerIds = callerIds.map(c => ({
+      phoneNumber: c.phoneNumber,
+      friendlyName: c.friendlyName
+    }));
+
     if (!callerIdMatch) {
       console.log('No se encontró Caller ID con friendly name:', verifiedEmail);
-      // Devolver la lista completa para que el usuario seleccione manualmente
       return res.status(200).json({
         email: verifiedEmail,
         callerId: null,
         matched: false,
-        availableCallerIds: callerIds.map(c => ({
-          phoneNumber: c.phoneNumber,
-          friendlyName: c.friendlyName
-        }))
+        availableCallerIds: allCallerIds
       });
     }
 
@@ -69,7 +71,8 @@ export default async function handler(req, res) {
       email: verifiedEmail,
       callerId: callerIdMatch.phoneNumber,
       friendlyName: callerIdMatch.friendlyName,
-      matched: true
+      matched: true,
+      availableCallerIds: allCallerIds
     });
   } catch (error) {
     console.error('Error obteniendo Caller ID del ejecutivo:', error);

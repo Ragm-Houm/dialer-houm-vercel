@@ -559,6 +559,10 @@ export default function Home() {
         .then(res => res.json())
         .then(data => {
           setCallerIdLoading(false);
+          // Siempre guardar la lista para permitir cambio manual
+          if (data.availableCallerIds && data.availableCallerIds.length > 0) {
+            setAvailableCallerIds(data.availableCallerIds);
+          }
           if (data.callerId) {
             console.log('✅ Caller ID asignado:', data.callerId);
             setCallerId(data.callerId);
@@ -568,9 +572,6 @@ export default function Home() {
             console.log('⚠️ Sin Caller ID asignado');
             setCallerIdMatched(false);
             setCallerIdError('Sin Caller ID asignado');
-            if (data.availableCallerIds && data.availableCallerIds.length > 0) {
-              setAvailableCallerIds(data.availableCallerIds);
-            }
           }
         })
         .catch(err => {
@@ -5462,15 +5463,13 @@ export default function Home() {
                         <span className="callerid-label">Sin Caller ID asignado</span>
                       </div>
                     )}
-                    {!callerId && !callerIdLoading && availableCallerIds.length > 0 && (
+                    {!callerIdLoading && availableCallerIds.length > 0 && (
                       <select
                         className="campaign-select"
-                        value=""
+                        value={callerId}
                         onChange={(e) => {
-                          if (e.target.value) {
-                            setCallerId(e.target.value);
-                            setCallerIdError('');
-                          }
+                          setCallerId(e.target.value);
+                          setCallerIdError(e.target.value ? '' : 'Sin Caller ID asignado');
                         }}
                       >
                         <option value="">Seleccionar Caller ID</option>
