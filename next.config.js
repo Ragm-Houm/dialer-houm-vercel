@@ -43,12 +43,12 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://accounts.google.com https://apis.google.com https://sdk.twilio.com",
-              "style-src 'self' 'unsafe-inline' https://accounts.google.com https://fonts.googleapis.com",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://accounts.google.com https://apis.google.com https://sdk.twilio.com https://*.gstatic.com",
+              "style-src 'self' 'unsafe-inline' https://accounts.google.com https://fonts.googleapis.com https://*.gstatic.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: https: blob:",
-              "connect-src 'self' https://accounts.google.com https://*.twilio.com wss://*.twilio.com https://*.pipedrive.com https://*.supabase.co",
-              "frame-src 'self' https://accounts.google.com",
+              "connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com https://*.twilio.com wss://*.twilio.com https://*.pipedrive.com https://*.supabase.co",
+              "frame-src 'self' https://accounts.google.com https://*.google.com",
               "media-src 'self' https://*.twilio.com blob:",
               "worker-src 'self' blob:"
             ].join('; ')
