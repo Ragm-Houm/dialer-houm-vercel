@@ -6,6 +6,7 @@ const {
   listCallOutcomes
 } = require('../../lib/supabase');
 const { requireUser } = require('../../lib/auth');
+const { getCredentials } = require('../../lib/session-cookie');
 const { buildCampaignKey } = require('../../lib/review');
 
 function initCampaign(acc, key, base) {
@@ -102,12 +103,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { email, idToken, dateFrom, dateTo } = req.query;
-    if (!email || !idToken) {
-      return res.status(400).json({ error: 'Email y Google idToken son requeridos' });
-    }
+    const { dateFrom, dateTo } = req.query;
 
-    const auth = await requireUser({ email, idToken }, ['admin', 'supervisor']);
+    // requireUser lee cookies automáticamente y valida por DB si hay sesión activa
+    const auth = await requireUser(req, ['admin', 'supervisor']);
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.error });
     }

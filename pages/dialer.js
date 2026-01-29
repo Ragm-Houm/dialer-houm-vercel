@@ -131,7 +131,7 @@ export default function Home() {
   useEffect(() => {
     if (!isSessionReady) return;
     setAuthError(sessionError || '');
-    if (!session?.email || !session?.idToken) {
+    if (!session?.email) {
       setEmail('');
       setIdToken('');
       setUserRole('ejecutivo');
@@ -140,7 +140,7 @@ export default function Home() {
       return;
     }
     setEmail(session.email);
-    setIdToken(session.idToken);
+    setIdToken('__cookie__');
     setUserRole(session.role || 'ejecutivo');
     if (session.country) {
       setPais(session.country);
@@ -154,7 +154,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!isSessionReady) return;
-    if (!session?.email || !session?.idToken) {
+    if (!session?.email) {
       router.replace('/login');
     }
   }, [isSessionReady, session, router]);

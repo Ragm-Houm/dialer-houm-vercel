@@ -4,7 +4,6 @@ const { getEjecutivoInfo } = require('../../lib/supabase');
 const { requireUser } = require('../../lib/auth');
 const { requireCsrf } = require('../../lib/csrf');
 const { requireRateLimit } = require('../../lib/rate-limit');
-const { getCredentials } = require('../../lib/session-cookie');
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -22,33 +21,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Leer credenciales de cookies primero, luego body como fallback
-    const creds = getCredentials(req);
-    const email = creds?.email || req.body?.email;
-    const idToken = creds?.idToken || req.body?.idToken;
-
-    let verifiedEmail;
-
-    // Si tenemos credenciales de cookie, validar por DB (token Google puede estar expirado)
-    if (creds?.source === 'cookie' && creds.email) {
-      const { getUserByEmail } = require('../../lib/supabase');
-      const user = await getUserByEmail(creds.email).catch(() => null);
-      if (user && user.activo) {
-        verifiedEmail = user.email;
-      }
+    // requireUser lee cookies automáticamente y valida por DB si hay sesión activa
+    const auth = await requireUser(req);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
     }
-
-    // Fallback: validar con Google ID Token (login fresco)
-    if (!verifiedEmail) {
-      if (!email || !idToken) {
-        return res.status(400).json({ error: 'Email y Google idToken son requeridos' });
-      }
-      const auth = await requireUser({ email, idToken });
-      if (!auth.ok) {
-        return res.status(auth.status).json({ error: auth.error });
-      }
-      verifiedEmail = auth.user.email;
-    }
+    const verifiedEmail = auth.user.email;
 
     const ejecutivo = await getEjecutivoInfo(verifiedEmail);
     if (!ejecutivo || !ejecutivo.activo) {

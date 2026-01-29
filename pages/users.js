@@ -95,7 +95,7 @@ export default function UsersPage() {
   useEffect(() => {
     if (!isSessionReady) return;
     setAuthError(sessionError || '');
-    if (!session?.email || !session?.idToken) {
+    if (!session?.email) {
       router.replace('/login');
       return;
     }
@@ -105,10 +105,10 @@ export default function UsersPage() {
       return;
     }
     setEmail(session.email);
-    setIdToken(session.idToken);
+    setIdToken('__cookie__');
     setRole(session.role || 'ejecutivo');
     setSessionStarted(true);
-    bootstrap(session.email, session.idToken, session.role || 'ejecutivo');
+    bootstrap(session.email, '__cookie__', session.role || 'ejecutivo');
   }, [isSessionReady, session, sessionError, router]);
   const reload = async () => {
     if (!email || !idToken) return;

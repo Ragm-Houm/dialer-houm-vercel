@@ -419,7 +419,7 @@ export default function ReviewPage() {
   useEffect(() => {
     if (!isSessionReady) return;
     setAuthError(sessionError || '');
-    if (!session?.email || !session?.idToken) {
+    if (!session?.email) {
       clearWizardDraft();
       router.replace('/login');
       return;
@@ -430,7 +430,7 @@ export default function ReviewPage() {
       return;
     }
     setEmail(session.email);
-    setIdToken(session.idToken);
+    setIdToken('__cookie__');
     setUserRole(session.role || 'ejecutivo');
     const baseCountry = session.country || 'CO';
     setCountry(baseCountry);

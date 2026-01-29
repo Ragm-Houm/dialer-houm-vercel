@@ -117,7 +117,7 @@ export default function MetricsPage() {
   useEffect(() => {
     if (!isSessionReady) return;
     setAuthError(sessionError || '');
-    if (!session?.email || !session?.idToken) {
+    if (!session?.email) {
       router.replace('/login');
       return;
     }
@@ -127,7 +127,7 @@ export default function MetricsPage() {
       return;
     }
     setEmail(session.email);
-    setIdToken(session.idToken);
+    setIdToken('__cookie__');
     setRole(session.role || 'ejecutivo');
     setSessionStarted(true);
   }, [isSessionReady, session, sessionError, router]);
