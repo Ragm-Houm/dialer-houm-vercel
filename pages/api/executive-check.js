@@ -7,12 +7,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { email, idToken } = req.body || {};
-    if (!email || !idToken) {
-      return res.status(400).json({ error: 'Email y Google idToken son requeridos' });
-    }
-
-    const auth = await requireUser({ email, idToken });
+    const auth = await requireUser(req);
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.error });
     }

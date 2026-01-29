@@ -9,16 +9,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { dealId, country, email, idToken, stageId: stageIdRaw } = req.query;
+    const { dealId, country, stageId: stageIdRaw } = req.query;
     const config = getCountryConfig(country);
     if (!dealId || !config) {
       return res.status(400).json({ error: 'dealId y pais son requeridos' });
     }
-    if (!email || !idToken) {
-      return res.status(400).json({ error: 'Email y Google idToken son requeridos' });
-    }
 
-    const auth = await requireUser({ email, idToken }, ['admin', 'supervisor']);
+    const auth = await requireUser(req, ['admin', 'supervisor']);
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.error });
     }
@@ -37,7 +34,7 @@ export default async function handler(req, res) {
       pipeline_id: config.pipelineId,
       stage_id: stageId,
       deal_id: Number(dealId),
-      reviewed_by: email || '',
+      reviewed_by: auth.user.email,
       payload: { candidates: candidates.candidates, stats: candidates.stats || {} }
     });
 

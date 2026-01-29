@@ -7,12 +7,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { sessionId, email, idToken, activeSeconds, callSeconds, idleSeconds, status } = req.body || {};
-    if (!sessionId || !email || !idToken) {
-      return res.status(400).json({ error: 'sessionId, email e idToken son requeridos' });
+    const { sessionId, activeSeconds, callSeconds, idleSeconds, status } = req.body || {};
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionId es requerido' });
     }
 
-    const auth = await requireUser({ email, idToken });
+    const auth = await requireUser(req);
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.error });
     }

@@ -10,12 +10,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { campaignKey, dealId, outcome, email, idToken, skip, forceDone, nextAttemptAt } = req.body || {};
-    if (!campaignKey || !dealId || !email || !idToken) {
-      return res.status(400).json({ error: 'campaignKey, dealId, email e idToken son requeridos' });
+    const { campaignKey, dealId, outcome, skip, forceDone, nextAttemptAt } = req.body || {};
+    if (!campaignKey || !dealId) {
+      return res.status(400).json({ error: 'campaignKey y dealId son requeridos' });
     }
 
-    const auth = await requireUser({ email, idToken });
+    const auth = await requireUser(req);
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.error });
     }

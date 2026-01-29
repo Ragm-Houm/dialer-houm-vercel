@@ -7,12 +7,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { campaignKey, email, idToken } = req.body || {};
-    if (!campaignKey || !email || !idToken) {
-      return res.status(400).json({ error: 'campaignKey, email e idToken son requeridos' });
+    const { campaignKey } = req.body || {};
+    if (!campaignKey) {
+      return res.status(400).json({ error: 'campaignKey es requerido' });
     }
 
-    const auth = await requireUser({ email, idToken });
+    const auth = await requireUser(req);
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.error });
     }

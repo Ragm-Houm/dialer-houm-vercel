@@ -3,7 +3,6 @@
 const { getCallerIds } = require('../../lib/twilio');
 const { getEjecutivoInfo } = require('../../lib/supabase');
 const { requireUser } = require('../../lib/auth');
-const { getCredentials } = require('../../lib/session-cookie');
 const { requireRateLimit } = require('../../lib/rate-limit');
 
 export default async function handler(req, res) {
@@ -17,16 +16,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Obtener credenciales de cookies (preferido) o query params (legacy)
-    const creds = getCredentials(req);
-    const email = creds?.email || req.query.email;
-    const idToken = creds?.idToken || req.query.idToken;
-
-    if (!email || !idToken) {
-      return res.status(401).json({ error: 'No autorizado' });
-    }
-
-    const auth = await requireUser({ email, idToken });
+    const auth = await requireUser(req);
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.error });
     }

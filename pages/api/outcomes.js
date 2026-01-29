@@ -1,6 +1,5 @@
 const { listCallOutcomes, createCallOutcome, deleteCallOutcome, updateCallOutcome } = require('../../lib/supabase');
 const { requireUser } = require('../../lib/auth');
-const { getCredentials } = require('../../lib/session-cookie');
 const { requireRateLimit } = require('../../lib/rate-limit');
 const { requireCsrf } = require('../../lib/csrf');
 
@@ -20,15 +19,7 @@ export default async function handler(req, res) {
     }
 
     try {
-      // Obtener credenciales de cookies o query params
-      const creds = getCredentials(req);
-      const email = creds?.email || req.query.email;
-      const idToken = creds?.idToken || req.query.idToken;
-
-      if (!email || !idToken) {
-        return res.status(401).json({ error: 'No autorizado' });
-      }
-      const auth = await requireUser({ email, idToken });
+      const auth = await requireUser(req);
       if (!auth.ok) {
         return res.status(auth.status).json({ error: auth.error });
       }
@@ -49,18 +40,12 @@ export default async function handler(req, res) {
     }
 
     try {
-      const creds = getCredentials(req);
-      const email = creds?.email || req.body?.email;
-      const idToken = creds?.idToken || req.body?.idToken;
       const { label, outcomeType, metricBucket } = req.body || {};
 
       if (!label) {
         return res.status(400).json({ error: 'label es requerido' });
       }
-      if (!email || !idToken) {
-        return res.status(401).json({ error: 'No autorizado' });
-      }
-      const auth = await requireUser({ email, idToken }, ['admin']);
+      const auth = await requireUser(req, ['admin']);
       if (!auth.ok) {
         return res.status(auth.status).json({ error: auth.error });
       }
@@ -91,18 +76,12 @@ export default async function handler(req, res) {
     }
 
     try {
-      const creds = getCredentials(req);
-      const email = creds?.email || req.body?.email;
-      const idToken = creds?.idToken || req.body?.idToken;
       const { id } = req.body || {};
 
       if (!id) {
         return res.status(400).json({ error: 'id es requerido' });
       }
-      if (!email || !idToken) {
-        return res.status(401).json({ error: 'No autorizado' });
-      }
-      const auth = await requireUser({ email, idToken }, ['admin']);
+      const auth = await requireUser(req, ['admin']);
       if (!auth.ok) {
         return res.status(auth.status).json({ error: auth.error });
       }
@@ -123,18 +102,12 @@ export default async function handler(req, res) {
     }
 
     try {
-      const creds = getCredentials(req);
-      const email = creds?.email || req.body?.email;
-      const idToken = creds?.idToken || req.body?.idToken;
       const { id, label, outcomeType, metricBucket, sortOrder, activo } = req.body || {};
 
       if (!id) {
         return res.status(400).json({ error: 'id es requerido' });
       }
-      if (!email || !idToken) {
-        return res.status(401).json({ error: 'No autorizado' });
-      }
-      const auth = await requireUser({ email, idToken }, ['admin']);
+      const auth = await requireUser(req, ['admin']);
       if (!auth.ok) {
         return res.status(auth.status).json({ error: auth.error });
       }

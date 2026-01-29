@@ -350,7 +350,7 @@ export default function ReviewPage() {
   const { session, isSessionReady, sessionError, clearSession, csrfFetch } = useSession();
   const [authError, setAuthError] = useState('');
   const [email, setEmail] = useState('');
-  const [idToken, setIdToken] = useState('');
+
   const [userRole, setUserRole] = useState('ejecutivo');
   const [country, setCountry] = useState('CO');
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -430,7 +430,7 @@ export default function ReviewPage() {
       return;
     }
     setEmail(session.email);
-    setIdToken('__cookie__');
+
     setUserRole(session.role || 'ejecutivo');
     const baseCountry = session.country || 'CO';
     setCountry(baseCountry);
@@ -680,11 +680,11 @@ export default function ReviewPage() {
   };
 
   const loadWizardOwners = async () => {
-    if (!email || !idToken || !wizardCountry) return;
+    if (!email || !wizardCountry) return;
     try {
       setWizardOwnersLoading(true);
       const usersRes = await fetch(
-        `/api/users?email=${encodeURIComponent(email)}&idToken=${encodeURIComponent(idToken)}`
+        `/api/users?email=${encodeURIComponent(email)}`
       );
       const usersData = await usersRes.json();
       if (!usersRes.ok) {
@@ -781,7 +781,7 @@ export default function ReviewPage() {
       const res = await fetch(
         `/api/campaign-preview?country=${wizardCountry}&stageId=${wizardStageId}${ownerIdsParam}${includeLabelsParam}${excludeLabelsParam}&email=${encodeURIComponent(
           email
-        )}&idToken=${encodeURIComponent(idToken)}`
+)}`
       );
       const data = await res.json();
       if (!res.ok) {
@@ -805,12 +805,12 @@ export default function ReviewPage() {
   };
 
   const loadCampaigns = async (filter = campaignsFilter) => {
-    if (!email || !idToken) return;
+    if (!email) return;
     try {
       setCampaignsLoading(true);
       const statusParam = filter && filter !== 'all' ? `&status=${filter}` : '';
       const res = await fetch(
-        `/api/campaigns?country=${country}${statusParam}&email=${encodeURIComponent(email)}&idToken=${encodeURIComponent(idToken)}`
+        `/api/campaigns?country=${country}${statusParam}&email=${encodeURIComponent(email)}`
       );
       const data = await res.json();
       if (!res.ok) {
@@ -835,8 +835,7 @@ export default function ReviewPage() {
               body: JSON.stringify({
                 campaignKey: campaign.campaign_key,
                 status: 'inactive',
-                email,
-                idToken
+                email
               })
             })
           )
@@ -857,11 +856,11 @@ export default function ReviewPage() {
   };
 
   const loadOutcomes = async () => {
-    if (!email || !idToken) return;
+    if (!email) return;
     try {
       setOutcomesLoading(true);
       const res = await fetch(
-        `/api/outcomes?email=${encodeURIComponent(email)}&idToken=${encodeURIComponent(idToken)}`
+        `/api/outcomes?email=${encodeURIComponent(email)}`
       );
       const data = await res.json();
       if (!res.ok) {
@@ -879,10 +878,10 @@ export default function ReviewPage() {
   };
 
   useEffect(() => {
-    if (!email || !idToken) return;
+    if (!email) return;
     loadCampaigns(campaignsFilter);
     loadOutcomes();
-  }, [email, idToken, country, campaignsFilter]);
+  }, [email, country, campaignsFilter]);
 
   useEffect(() => {
     if (!createNotice) return;
@@ -951,7 +950,7 @@ export default function ReviewPage() {
   useEffect(() => {
     if (!wizardOpen || wizardStep < 3) return;
     loadWizardPreview();
-  }, [wizardOpen, wizardStep, wizardCountry, wizardStageId, email, idToken, wizardSource, wizardFileRows]);
+  }, [wizardOpen, wizardStep, wizardCountry, wizardStageId, email, wizardSource, wizardFileRows]);
 
   useEffect(() => {
     if (!wizardPreviewLoading) return;
@@ -966,9 +965,9 @@ export default function ReviewPage() {
   }, [wizardPreviewLoading]);
 
   const loadExecutives = async () => {
-    if (!email || !idToken) return;
+    if (!email) return;
     try {
-      const res = await fetch(`/api/users?email=${encodeURIComponent(email)}&idToken=${encodeURIComponent(idToken)}`);
+      const res = await csrfFetch(`/api/users?email=${encodeURIComponent(email)}`);
       const data = await res.json();
       if (!res.ok) {
         return;
@@ -988,13 +987,13 @@ export default function ReviewPage() {
   useEffect(() => {
     if (!wizardOpen || wizardStep !== 5) return;
     loadExecutives();
-  }, [wizardOpen, wizardStep, wizardCountry, wizardAllowAllExecs, email, idToken]);
+  }, [wizardOpen, wizardStep, wizardCountry, wizardAllowAllExecs, email]);
 
   useEffect(() => {
     if (!wizardOpen || wizardStep !== 2) return;
     if (wizardSource !== 'auto') return;
     loadWizardOwners();
-  }, [wizardOpen, wizardStep, wizardCountry, wizardOwnerMode, email, idToken, wizardSource]);
+  }, [wizardOpen, wizardStep, wizardCountry, wizardOwnerMode, email, wizardSource]);
 
   const handleWizardStageChange = (value) => {
     setWizardStageId(value);
@@ -1072,8 +1071,7 @@ export default function ReviewPage() {
           allowedExecs: wizardAllowAllExecs ? [] : wizardSelectedExecs,
           source: wizardSource,
           manualRows: wizardSource === 'manual' ? wizardFileRows : [],
-          email,
-          idToken
+          email
         })
       });
       const data = await res.json();
@@ -1117,9 +1115,7 @@ export default function ReviewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           campaignKey,
-          status,
-          email,
-          idToken
+          status
         })
       });
       setDetailStatusNote(`Campaña ${status === 'active' ? 'activada' : 'inactivada'}.`);
@@ -1146,9 +1142,7 @@ export default function ReviewPage() {
           status: 'active',
           closeAt,
           closeTz,
-          noTimeLimit: reactivateNoLimit,
-          email,
-          idToken
+          noTimeLimit: reactivateNoLimit
         })
       });
       const data = await res.json();
@@ -1188,7 +1182,7 @@ export default function ReviewPage() {
       const res = await csrfFetch('/api/campaigns', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignKey, email, idToken })
+        body: JSON.stringify({ campaignKey })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1213,9 +1207,7 @@ export default function ReviewPage() {
         body: JSON.stringify({
           label: newOutcomeLabel.trim(),
           outcomeType: newOutcomeType,
-          metricBucket: newOutcomeBucket,
-          email,
-          idToken
+          metricBucket: newOutcomeBucket
         })
       });
       const data = await res.json();
@@ -1239,9 +1231,7 @@ export default function ReviewPage() {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id,
-          email,
-          idToken
+          id
         })
       });
       const data = await res.json();
@@ -1266,9 +1256,7 @@ export default function ReviewPage() {
           outcomeType: updates.outcome_type,
           metricBucket: updates.metric_bucket,
           sortOrder: updates.sort_order,
-          activo: updates.activo,
-          email,
-          idToken
+          activo: updates.activo
         })
       });
       const data = await res.json();
@@ -1288,8 +1276,8 @@ export default function ReviewPage() {
   const openDetail = async (campaignKey) => {
     try {
       setDetailLoading(true);
-      const res = await fetch(
-        `/api/campaign-detail?campaignKey=${encodeURIComponent(campaignKey)}&email=${encodeURIComponent(email)}&idToken=${encodeURIComponent(idToken)}`
+      const res = await csrfFetch(
+        `/api/campaign-detail?campaignKey=${encodeURIComponent(campaignKey)}`
       );
       const data = await res.json();
       if (!res.ok) {

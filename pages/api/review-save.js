@@ -25,8 +25,6 @@ export default async function handler(req, res) {
       selectedPrimary,
       selectedSecondary,
       skipped,
-      email,
-      idToken,
       stageId: stageIdRaw,
       notes,
       stats
@@ -36,10 +34,7 @@ export default async function handler(req, res) {
     if (!config || !dealId) {
       return res.status(400).json({ error: 'Pais y dealId son requeridos' });
     }
-    if (!email || !idToken) {
-      return res.status(400).json({ error: 'Email y Google idToken son requeridos' });
-    }
-    const auth = await requireUser({ email, idToken }, ['admin', 'supervisor']);
+    const auth = await requireUser(req, ['admin', 'supervisor']);
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.error });
     }
@@ -52,7 +47,7 @@ export default async function handler(req, res) {
       stage_id: stageId,
       deal_id: Number(dealId),
       person_id: personId ? Number(personId) : null,
-      reviewed_by: email || '',
+      reviewed_by: auth.user.email,
       deal_title: dealTitle || '',
       person_name: personName || '',
       stage_name: stageName || '',
@@ -70,7 +65,7 @@ export default async function handler(req, res) {
       pipeline_id: config.pipelineId,
       stage_id: stageId,
       deal_id: Number(dealId),
-      reviewed_by: email || '',
+      reviewed_by: auth.user.email,
       payload: {
         selectedPrimary: selectedPrimary || '',
         selectedSecondary: selectedSecondary || '',
@@ -91,7 +86,7 @@ export default async function handler(req, res) {
       campaignKey,
       Number(dealId),
       skipped ? 'skipped' : 'reviewed',
-      email || 'system'
+      auth.user.email
     );
 
     res.status(200).json({ ok: true, record });

@@ -5,7 +5,6 @@ const {
   deleteCampaignByKey
 } = require('../../lib/supabase');
 const { requireUser } = require('../../lib/auth');
-const { getCredentials } = require('../../lib/session-cookie');
 const { requireRateLimit } = require('../../lib/rate-limit');
 const { requireCsrf } = require('../../lib/csrf');
 
@@ -19,15 +18,7 @@ export default async function handler(req, res) {
     try {
       const { country, status } = req.query;
 
-      // Obtener credenciales de cookies o query params
-      const creds = getCredentials(req);
-      const email = creds?.email || req.query.email;
-      const idToken = creds?.idToken || req.query.idToken;
-
-      if (!email || !idToken) {
-        return res.status(401).json({ error: 'No autorizado' });
-      }
-      const auth = await requireUser({ email, idToken });
+      const auth = await requireUser(req);
       if (!auth.ok) {
         return res.status(auth.status).json({ error: auth.error });
       }
@@ -64,19 +55,11 @@ export default async function handler(req, res) {
     }
 
     try {
-      // Obtener credenciales de cookies o body
-      const creds = getCredentials(req);
-      const email = creds?.email || req.body?.email;
-      const idToken = creds?.idToken || req.body?.idToken;
-
       const { campaignKey, status, closeAt, closeTz, noTimeLimit } = req.body || {};
       if (!campaignKey || !status) {
         return res.status(400).json({ error: 'campaignKey y status son requeridos' });
       }
-      if (!email || !idToken) {
-        return res.status(401).json({ error: 'No autorizado' });
-      }
-      const auth = await requireUser({ email, idToken }, ['admin', 'supervisor']);
+      const auth = await requireUser(req, ['admin', 'supervisor']);
       if (!auth.ok) {
         return res.status(auth.status).json({ error: auth.error });
       }
@@ -113,19 +96,11 @@ export default async function handler(req, res) {
     }
 
     try {
-      // Obtener credenciales de cookies o body
-      const creds = getCredentials(req);
-      const email = creds?.email || req.body?.email;
-      const idToken = creds?.idToken || req.body?.idToken;
-
       const { campaignKey } = req.body || {};
       if (!campaignKey) {
         return res.status(400).json({ error: 'campaignKey es requerido' });
       }
-      if (!email || !idToken) {
-        return res.status(401).json({ error: 'No autorizado' });
-      }
-      const auth = await requireUser({ email, idToken }, ['admin', 'supervisor']);
+      const auth = await requireUser(req, ['admin', 'supervisor']);
       if (!auth.ok) {
         return res.status(auth.status).json({ error: auth.error });
       }

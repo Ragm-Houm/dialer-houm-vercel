@@ -157,15 +157,13 @@ export default async function handler(req, res) {
       closeTz,
       noTimeLimit,
       allowAllExecs,
-      allowedExecs,
-      email,
-      idToken
+      allowedExecs
     } = req.body || {};
-    if (!country || !stageIdRaw || !email || !idToken) {
-      return res.status(400).json({ error: 'country, stageId, email e idToken son requeridos' });
+    if (!country || !stageIdRaw) {
+      return res.status(400).json({ error: 'country y stageId son requeridos' });
     }
 
-    const auth = await requireUser({ email, idToken }, ['admin', 'supervisor']);
+    const auth = await requireUser(req, ['admin', 'supervisor']);
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.error });
     }

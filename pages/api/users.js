@@ -2,7 +2,6 @@ const { listUsers, upsertUser, getUserByEmail } = require('../../lib/supabase');
 const { requireUser } = require('../../lib/auth');
 const { requireCsrf } = require('../../lib/csrf');
 const { requireRateLimit } = require('../../lib/rate-limit');
-const { getCredentials } = require('../../lib/session-cookie');
 
 export default async function handler(req, res) {
   try {
@@ -12,16 +11,7 @@ export default async function handler(req, res) {
         return;
       }
 
-      // Obtener credenciales de cookies o query params
-      const creds = getCredentials(req);
-      const email = creds?.email || req.query.email;
-      const idToken = creds?.idToken || req.query.idToken;
-
-      if (!email || !idToken) {
-        return res.status(401).json({ error: 'No autorizado' });
-      }
-
-      const auth = await requireUser({ email, idToken }, ['admin', 'supervisor']);
+      const auth = await requireUser(req, ['admin', 'supervisor']);
       if (!auth.ok) {
         return res.status(auth.status).json({ error: auth.error });
       }
@@ -39,18 +29,9 @@ export default async function handler(req, res) {
         return;
       }
 
-      // Obtener credenciales de cookies o body
-      const creds = getCredentials(req);
-      const email = creds?.email || req.body?.email;
-      const idToken = creds?.idToken || req.body?.idToken;
-
       const { targetEmail, role, country, activo } = req.body || {};
 
-      if (!email || !idToken) {
-        return res.status(401).json({ error: 'No autorizado' });
-      }
-
-      const auth = await requireUser({ email, idToken }, ['admin', 'supervisor']);
+      const auth = await requireUser(req, ['admin', 'supervisor']);
       if (!auth.ok) {
         return res.status(auth.status).json({ error: auth.error });
       }

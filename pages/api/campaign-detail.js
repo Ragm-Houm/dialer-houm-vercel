@@ -1,6 +1,5 @@
 const { getCampaignByKey, listCampaignDeals, listCallOutcomes, getCampaignAvailability } = require('../../lib/supabase');
 const { requireUser } = require('../../lib/auth');
-const { getCredentials } = require('../../lib/session-cookie');
 const { requireRateLimit } = require('../../lib/rate-limit');
 
 function summarizeOutcome(outcome) {
@@ -21,19 +20,11 @@ export default async function handler(req, res) {
   try {
     const { campaignKey } = req.query;
 
-    // Obtener credenciales de cookies o query params
-    const creds = getCredentials(req);
-    const email = creds?.email || req.query.email;
-    const idToken = creds?.idToken || req.query.idToken;
-
     if (!campaignKey) {
       return res.status(400).json({ error: 'campaignKey es requerido' });
     }
-    if (!email || !idToken) {
-      return res.status(401).json({ error: 'No autorizado' });
-    }
 
-    const auth = await requireUser({ email, idToken }, ['admin', 'supervisor']);
+    const auth = await requireUser(req, ['admin', 'supervisor']);
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.error });
     }

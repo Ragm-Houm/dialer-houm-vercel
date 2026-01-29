@@ -2,7 +2,6 @@
 const { getSiguienteLead, getEjecutivoInfo } = require('../../lib/supabase');
 const { getDealContext } = require('../../lib/pipedrive');
 const { requireUser } = require('../../lib/auth');
-const { getCredentials } = require('../../lib/session-cookie');
 const { requireRateLimit } = require('../../lib/rate-limit');
 
 export default async function handler(req, res) {
@@ -18,20 +17,11 @@ export default async function handler(req, res) {
   try {
     const { pais } = req.query;
 
-    // Obtener credenciales de cookies (preferido) o query params (legacy)
-    const creds = getCredentials(req);
-    const email = creds?.email || req.query.email;
-    const idToken = creds?.idToken || req.query.idToken;
-
     if (!pais) {
       return res.status(400).json({ error: 'País es requerido' });
     }
 
-    if (!email || !idToken) {
-      return res.status(401).json({ error: 'No autorizado' });
-    }
-
-    const auth = await requireUser({ email, idToken });
+    const auth = await requireUser(req);
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.error });
     }

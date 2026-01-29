@@ -43,7 +43,7 @@ export default function Home() {
   const [pais, setPais] = useState('');
   const [callerId, setCallerId] = useState('');
   const [email, setEmail] = useState('');
-  const [idToken, setIdToken] = useState('');
+
   const [sdkLoaded, setSdkLoaded] = useState(false);
   const [DeviceClass, setDeviceClass] = useState(null);
   const [currentLead, setCurrentLead] = useState(null);
@@ -133,14 +133,12 @@ export default function Home() {
     setAuthError(sessionError || '');
     if (!session?.email) {
       setEmail('');
-      setIdToken('');
       setUserRole('ejecutivo');
       setPais('');
       paisRef.current = '';
       return;
     }
     setEmail(session.email);
-    setIdToken('__cookie__');
     setUserRole(session.role || 'ejecutivo');
     if (session.country) {
       setPais(session.country);
@@ -205,12 +203,12 @@ export default function Home() {
   }, [sessionStarted]);
 
   const loadCampaigns = async (nextCountry = pais) => {
-    if (!email || !idToken || !nextCountry) return;
+    if (!email || !nextCountry) return;
     try {
       setCampaignsLoading(true);
       setCampaignError('');
       const res = await fetch(
-        `/api/campaigns?country=${nextCountry}&status=active&email=${encodeURIComponent(email)}&idToken=${encodeURIComponent(idToken)}`
+        `/api/campaigns?country=${nextCountry}&status=active&email=${encodeURIComponent(email)}`
       );
       const data = await res.json();
       if (!res.ok) {
@@ -241,13 +239,13 @@ export default function Home() {
   useEffect(() => {
     if (!sessionStarted) return;
     loadCampaigns();
-  }, [sessionStarted, pais, email, idToken]);
+  }, [sessionStarted, pais, email]);
 
   const loadCallOutcomes = async () => {
-    if (!email || !idToken) return;
+    if (!email) return;
     try {
       const res = await fetch(
-        `/api/outcomes?email=${encodeURIComponent(email)}&idToken=${encodeURIComponent(idToken)}`
+        `/api/outcomes?email=${encodeURIComponent(email)}`
       );
       const data = await res.json();
       if (!res.ok) {
@@ -262,7 +260,7 @@ export default function Home() {
   useEffect(() => {
     if (!sessionStarted) return;
     loadCallOutcomes();
-  }, [sessionStarted, email, idToken]);
+  }, [sessionStarted, email]);
 
   useEffect(() => {
     if (!sessionStarted) return;
@@ -270,7 +268,7 @@ export default function Home() {
   }, [sessionStarted]);
 
   useEffect(() => {
-    if (!sessionStarted || !email || !idToken) return;
+    if (!sessionStarted || !email) return;
     const fetchLostReasons = async () => {
       try {
         const res = await csrfFetch('/api/pipedrive-lost-reasons');
@@ -283,7 +281,7 @@ export default function Home() {
       }
     };
     fetchLostReasons();
-  }, [sessionStarted, email, idToken]);
+  }, [sessionStarted, email]);
 
   useEffect(() => {
     if (!email) return;
@@ -530,14 +528,14 @@ export default function Home() {
 
   // Auto-cargar Caller ID cuando se ingresa el email
   useEffect(() => {
-    if (email && idToken && email.includes('@')) {
+    if (email && email.includes('@')) {
       console.log('📧 Email ingresado, cargando Caller ID asignado...');
       setCallerIdLoading(true);
       setCallerIdError('');
       setCallerId('');
 
       fetch(
-        `/api/ejecutivo-callerid?email=${encodeURIComponent(email)}&idToken=${encodeURIComponent(idToken)}`
+        `/api/ejecutivo-callerid?email=${encodeURIComponent(email)}`
       )
         .then(res => res.json())
         .then(data => {
@@ -560,13 +558,13 @@ export default function Home() {
       setCallerId('');
       setCallerIdError('');
     }
-  }, [email, idToken]);
+  }, [email]);
 
   // Iniciar sesión
   const handleStartSession = async () => {
     if (isSessionLoading) return;
     const country = paisRef.current;
-    if (!email || !idToken || !country) {
+    if (!email || !country) {
       alert('Inicia sesion con Google. Si falta el pais, pide que lo configuren.');
       return;
     }
@@ -596,7 +594,6 @@ export default function Home() {
       paisRef.current = userCountry;
       updateSession({
         email: verifiedEmail,
-        idToken: '__cookie__',
         role: meData.user?.role || 'ejecutivo',
         country: userCountry,
         picture: meData.google?.picture || ''
@@ -710,7 +707,7 @@ export default function Home() {
     if (!isSessionReady) return;
     if (autoStartRef.current) return;
     if (sessionStarted || isSessionLoading) return;
-    if (!email || !idToken || !pais) return;
+    if (!email || !pais) return;
     if (!sdkLoaded || !DeviceClass) return;
     autoStartRef.current = true;
     handleStartSession();
@@ -719,7 +716,6 @@ export default function Home() {
     sessionStarted,
     isSessionLoading,
     email,
-    idToken,
     pais,
     sdkLoaded,
     DeviceClass,
@@ -753,17 +749,16 @@ export default function Home() {
     return () => {
       isActive = false;
     };
-  }, [selectedCampaignKey, email, idToken]);
+  }, [selectedCampaignKey, email]);
 
   const fetchLead = async () => {
-    if (!selectedCampaignKey || !email || !idToken) return null;
+    if (!selectedCampaignKey || !email) return null;
     const res = await csrfFetch('/api/campaign-next-lead', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         campaignKey: selectedCampaignKey,
-        email,
-        idToken
+        email
       })
     });
     if (!res.ok) {
@@ -773,14 +768,13 @@ export default function Home() {
   };
 
   const fetchCampaignAvailability = async (campaignKey) => {
-    if (!campaignKey || !email || !idToken) return null;
+    if (!campaignKey || !email) return null;
     const res = await csrfFetch('/api/campaign-availability', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         campaignKey,
-        email,
-        idToken
+        email
       })
     });
     if (!res.ok) return null;
@@ -836,7 +830,7 @@ export default function Home() {
 
   const prefetchNextLead = async () => {
     if (nextLead || isLeadLoading) return;
-    if (!selectedCampaignKey || !email || !idToken) return;
+    if (!selectedCampaignKey || !email) return;
     if (!campaignJoined) return;
     try {
       const lead = await fetchLead();
@@ -1004,7 +998,7 @@ export default function Home() {
   const loadNextLead = async (forceJoin = false, options = {}) => {
     try {
       setIsLeadLoading(true);
-      if (!email || !idToken || !selectedCampaignKey) {
+      if (!email || !selectedCampaignKey) {
         setIsLeadLoading(false);
         if (!selectedCampaignKey) {
           showActionToast('Selecciona una campaña activa');
@@ -1326,8 +1320,7 @@ export default function Home() {
             callSeconds: campaignCallSeconds,
             idleSeconds: Math.max(0, campaignElapsed - campaignCallSeconds),
             status: mode === 'auto' ? 'closed_auto' : 'closed_manual',
-            email,
-            idToken
+            email
           })
         });
       }
@@ -1537,7 +1530,6 @@ export default function Home() {
           dealId: currentLead?.pipedriveDealId,
           outcome: selectedOutcome,
           email,
-          idToken,
           forceDone,
           nextAttemptAt
         })
@@ -1655,8 +1647,7 @@ export default function Home() {
           outcome: skipReason,
           skip: true,
           forceDone: true,
-          email,
-          idToken
+          email
         })
       });
       if (res.ok) {
@@ -1729,8 +1720,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           campaignKey: selectedCampaignKey,
-          email,
-          idToken
+          email
         })
       });
       const data = await res.json();
@@ -2023,8 +2013,7 @@ export default function Home() {
           callSeconds: campaignCallSeconds,
           idleSeconds: 0,
           status: 'closed',
-          email,
-          idToken
+          email
         })
       }).catch((error) => console.error('Error cerrando sesion de campaña:', error));
     }
@@ -2032,7 +2021,6 @@ export default function Home() {
     autoStartRef.current = false;
     setSessionStarted(false);
     setUserRole('ejecutivo');
-    setIdToken('');
     setAuthError('');
     setTwilioDevice(null);
     setActiveCall(null);
@@ -2068,7 +2056,7 @@ export default function Home() {
 
   const trackEvent = async (eventType, payload = {}, options = {}) => {
     const campaignKey = payload.campaignKey || selectedCampaignKey;
-    if (!campaignKey || !email || !idToken) return;
+    if (!campaignKey || !email) return;
     if (!campaignJoined && !options.allowWhenNotJoined) return;
     try {
       await csrfFetch('/api/track-event', {
@@ -2079,8 +2067,7 @@ export default function Home() {
           campaignKey,
           dealId: payload.dealId,
           metadata: payload,
-          email,
-          idToken
+          email
         })
       });
     } catch (error) {

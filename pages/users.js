@@ -10,7 +10,6 @@ const COUNTRY_OPTIONS = ['CO', 'MX', 'CL'];
 
 export default function UsersPage() {
   const [email, setEmail] = useState('');
-  const [idToken, setIdToken] = useState('');
   const [role, setRole] = useState('ejecutivo');
   const [sessionStarted, setSessionStarted] = useState(false);
   const [authError, setAuthError] = useState('');
@@ -65,18 +64,17 @@ export default function UsersPage() {
     router.replace('/dialer');
   };
 
-  const bootstrap = async (savedEmail, savedToken, savedRole) => {
+  const bootstrap = async (savedEmail, savedRole) => {
     try {
       setLoading(true);
       setAuthError('');
 
       setEmail(savedEmail);
-      setIdToken(savedToken);
       setRole(savedRole);
       setSessionStarted(true);
 
-      const res = await fetch(
-        `/api/users?email=${encodeURIComponent(savedEmail)}&idToken=${encodeURIComponent(savedToken)}`
+      const res = await csrfFetch(
+        `/api/users?email=${encodeURIComponent(savedEmail)}`
       );
       const data = await res.json();
       if (!res.ok) {
@@ -105,20 +103,19 @@ export default function UsersPage() {
       return;
     }
     setEmail(session.email);
-    setIdToken('__cookie__');
     setRole(session.role || 'ejecutivo');
     setSessionStarted(true);
-    bootstrap(session.email, '__cookie__', session.role || 'ejecutivo');
+    bootstrap(session.email, session.role || 'ejecutivo');
   }, [isSessionReady, session, sessionError, router]);
   const reload = async () => {
-    if (!email || !idToken) return;
+    if (!email) return;
     const res = await csrfFetch(`/api/users?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' });
     const data = await res.json();
     if (res.ok) setUsers(data.users || []);
   };
 
   const handleSave = async () => {
-    if (!email || !idToken || !targetEmail || !targetCountry) return;
+    if (!email || !targetEmail || !targetCountry) return;
     try {
       setSaving(true);
       const res = await csrfFetch('/api/users', {

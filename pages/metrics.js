@@ -10,7 +10,6 @@ const ALLOWED_ROLES = ['admin', 'supervisor'];
 
 export default function MetricsPage() {
   const [email, setEmail] = useState('');
-  const [idToken, setIdToken] = useState('');
   const [role, setRole] = useState('ejecutivo');
   const [sessionStarted, setSessionStarted] = useState(false);
   const [authError, setAuthError] = useState('');
@@ -127,12 +126,11 @@ export default function MetricsPage() {
       return;
     }
     setEmail(session.email);
-    setIdToken('__cookie__');
     setRole(session.role || 'ejecutivo');
     setSessionStarted(true);
   }, [isSessionReady, session, sessionError, router]);
 
-  const loadMetrics = async (userEmail, token) => {
+  const loadMetrics = async (userEmail) => {
     try {
       setLoading(true);
       const res = await csrfFetch(
@@ -166,10 +164,10 @@ export default function MetricsPage() {
   };
 
   useEffect(() => {
-    if (!sessionStarted || !email || !idToken) return;
-    loadMetrics(email, idToken);
+    if (!sessionStarted || !email) return;
+    loadMetrics(email);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionStarted, email, idToken, dateFrom, dateTo]);
+  }, [sessionStarted, email, dateFrom, dateTo]);
 
   const handleLogout = () => {
     clearSession();
@@ -641,7 +639,7 @@ export default function MetricsPage() {
                   }}
                   className="campaign-filter"
                 />
-                <button className="btn btn-secondary" onClick={() => loadMetrics(email, idToken)}>
+                <button className="btn btn-secondary" onClick={() => loadMetrics(email)}>
                   Actualizar
                 </button>
               </div>
