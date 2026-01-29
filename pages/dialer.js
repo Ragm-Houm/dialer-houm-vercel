@@ -28,6 +28,7 @@ import {
   PhoneMissed,
   PhoneOff,
   Plus,
+  RefreshCw,
   ThumbsDown,
   ThumbsUp,
   Volume2,
@@ -3362,6 +3363,18 @@ export default function Home() {
           background: var(--border-strong);
           transform: translateY(-1px);
         }
+        .btn-ghost {
+          background: transparent;
+          color: var(--text-muted);
+          border: 1px dashed var(--border);
+          font-size: 11px;
+          padding: 8px 12px;
+        }
+        .btn-ghost:hover {
+          color: var(--text-primary);
+          border-color: var(--border-strong);
+          background: var(--surface-soft);
+        }
         .btn-icon {
           margin-right: 8px;
           font-size: 16px;
@@ -5498,8 +5511,13 @@ export default function Home() {
                       <LogOut className="icon-sm" /> {campaignClosing ? 'Cerrando...' : 'Cerrar campaña'}
                     </button>
                   )}
-                  <button className="btn btn-secondary btn-full" onClick={loadCampaigns}>
-                    <Plus className="icon-sm" /> Recargar campañas
+                  <button
+                    className="btn btn-ghost btn-full"
+                    onClick={loadCampaigns}
+                    disabled={campaignsLoading}
+                  >
+                    <RefreshCw className={`icon-sm${campaignsLoading ? ' spin' : ''}`} />
+                    {campaignsLoading ? 'Cargando...' : 'Recargar campañas'}
                   </button>
                   {(() => {
                     const stats = (noLeadsInfo?.stats || campaignAvailability);
