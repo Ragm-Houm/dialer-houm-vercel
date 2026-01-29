@@ -122,7 +122,7 @@ export default function Home() {
   const router = useRouter();
   const paisRef = useRef('');
   const isManagerRole = userRole === 'admin' || userRole === 'supervisor';
-  const { session, isSessionReady, sessionError, updateSession, clearSession } = useSession();
+  const { session, isSessionReady, sessionError, updateSession, clearSession, csrfFetch } = useSession();
   const audioStreamRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
@@ -273,7 +273,7 @@ export default function Home() {
     if (!sessionStarted || !email || !idToken) return;
     const fetchLostReasons = async () => {
       try {
-        const res = await fetch('/api/pipedrive-lost-reasons');
+        const res = await csrfFetch('/api/pipedrive-lost-reasons');
         if (!res.ok) return;
         const data = await res.json();
         const reasons = (data.reasons || []).filter((item) => item.active_flag !== false);
@@ -573,10 +573,11 @@ export default function Home() {
 
     setIsSessionLoading(true);
     try {
-      const meRes = await fetch('/api/me', {
+      const meRes = await csrfFetch('/api/me', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, idToken })
+        credentials: 'same-origin',
+        body: JSON.stringify({ email })
       });
       const meData = await meRes.json();
       if (!meRes.ok) {
@@ -595,7 +596,7 @@ export default function Home() {
       paisRef.current = userCountry;
       updateSession({
         email: verifiedEmail,
-        idToken,
+        idToken: '__cookie__',
         role: meData.user?.role || 'ejecutivo',
         country: userCountry,
         picture: meData.google?.picture || ''
@@ -623,10 +624,11 @@ export default function Home() {
 
       // Obtener token de Twilio
       console.log('📡 Solicitando token...');
-      const tokenRes = await fetch('/api/token', {
+      const tokenRes = await csrfFetch('/api/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, idToken })
+        credentials: 'same-origin',
+        body: JSON.stringify({ email })
       });
 
       console.log('Token response status:', tokenRes.status);
@@ -755,7 +757,7 @@ export default function Home() {
 
   const fetchLead = async () => {
     if (!selectedCampaignKey || !email || !idToken) return null;
-    const res = await fetch('/api/campaign-next-lead', {
+    const res = await csrfFetch('/api/campaign-next-lead', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -772,7 +774,7 @@ export default function Home() {
 
   const fetchCampaignAvailability = async (campaignKey) => {
     if (!campaignKey || !email || !idToken) return null;
-    const res = await fetch('/api/campaign-availability', {
+    const res = await csrfFetch('/api/campaign-availability', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -820,7 +822,7 @@ export default function Home() {
     if (dealUsers.length > 0 || isUsersLoading) return;
     try {
       setIsUsersLoading(true);
-      const res = await fetch('/api/pipedrive-users');
+      const res = await csrfFetch('/api/pipedrive-users');
       if (!res.ok) return;
       const data = await res.json();
       const users = (data.users || []).filter((user) => !user.is_deleted && user.active_flag !== false);
@@ -1315,7 +1317,7 @@ export default function Home() {
     setCampaignSummary(summary);
     try {
       if (campaignSessionId) {
-        await fetch('/api/campaign-session-end', {
+        await csrfFetch('/api/campaign-session-end', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1485,7 +1487,7 @@ export default function Home() {
 
     try {
       if (shouldAssignOwner && execUserId) {
-        await fetch('/api/pipedrive-deal', {
+        await csrfFetch('/api/pipedrive-deal', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ dealId: currentLead?.pipedriveDealId, ownerId: execUserId })
@@ -1494,7 +1496,7 @@ export default function Home() {
       }
 
       if (selectedStageId) {
-        await fetch('/api/pipedrive-deal', {
+        await csrfFetch('/api/pipedrive-deal', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ dealId: currentLead?.pipedriveDealId, stageId: selectedStageId })
@@ -1514,7 +1516,7 @@ export default function Home() {
       });
 
       if (isLost && selectedLostReason) {
-        await fetch('/api/pipedrive-deal', {
+        await csrfFetch('/api/pipedrive-deal', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1527,7 +1529,7 @@ export default function Home() {
       }
 
       const forceDone = isPositive || isLost || isFuture;
-      const completionRes = await fetch('/api/campaign-complete', {
+      const completionRes = await csrfFetch('/api/campaign-complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1644,7 +1646,7 @@ export default function Home() {
         status: 'skipped',
         duracion: 0
       });
-      const res = await fetch('/api/campaign-complete', {
+      const res = await csrfFetch('/api/campaign-complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1722,7 +1724,7 @@ export default function Home() {
     setCampaignElapsed(0);
     setCampaignCallSeconds(0);
     try {
-      const res = await fetch('/api/campaign-session-start', {
+      const res = await csrfFetch('/api/campaign-session-start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1749,7 +1751,7 @@ export default function Home() {
     }
 
     try {
-      const res = await fetch('/api/pipedrive-log', {
+      const res = await csrfFetch('/api/pipedrive-log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1923,7 +1925,7 @@ export default function Home() {
     if (!currentLead?.pipedriveDealId || !ownerId) return;
     try {
       setIsOwnerUpdating(true);
-      const res = await fetch('/api/pipedrive-deal', {
+      const res = await csrfFetch('/api/pipedrive-deal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dealId: currentLead.pipedriveDealId, ownerId })
@@ -1980,7 +1982,7 @@ export default function Home() {
 
     try {
       setActivityUpdatingId(activityId);
-      const res = await fetch('/api/pipedrive-activity', {
+      const res = await csrfFetch('/api/pipedrive-activity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ activityId, done: true })
@@ -2012,7 +2014,7 @@ export default function Home() {
 
   const handleLogout = () => {
     if (campaignSessionId) {
-      fetch('/api/campaign-session-end', {
+      csrfFetch('/api/campaign-session-end', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2069,7 +2071,7 @@ export default function Home() {
     if (!campaignKey || !email || !idToken) return;
     if (!campaignJoined && !options.allowWhenNotJoined) return;
     try {
-      await fetch('/api/track-event', {
+      await csrfFetch('/api/track-event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
