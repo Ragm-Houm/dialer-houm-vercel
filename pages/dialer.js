@@ -1411,7 +1411,13 @@ export default function Home() {
       setSelectedOutcome(options.outcome);
       if (!options.mode) {
         const outcomeDef = getOutcomeByKey(options.outcome);
-        setCallOutcomeMode(POSITIVE_BUCKETS.has(outcomeDef.metric_bucket) ? 'positive' : 'negative');
+        if (POSITIVE_BUCKETS.has(outcomeDef.metric_bucket)) {
+          setCallOutcomeMode('positive');
+        } else if (NEUTRAL_BUCKETS.has(outcomeDef.metric_bucket)) {
+          setCallOutcomeMode('neutral');
+        } else {
+          setCallOutcomeMode('negative');
+        }
       }
     }
     setShowSkipForm(false);
@@ -2191,7 +2197,7 @@ export default function Home() {
         openOutcomeForm();
       } else {
         console.log('Llamada no conectó, mostrando resultado No contesta');
-        openOutcomeForm({ mode: 'negative', outcome: NO_CONTESTA_KEY });
+        openOutcomeForm({ mode: 'neutral', outcome: NO_CONTESTA_KEY });
       }
     });
 
@@ -2215,7 +2221,7 @@ export default function Home() {
         period: timeBucket.period,
         block: timeBucket.block
       });
-      openOutcomeForm({ mode: 'negative', outcome: NO_CONTESTA_KEY });
+      openOutcomeForm({ mode: 'neutral', outcome: NO_CONTESTA_KEY });
     });
 
     call.on('reject', async () => {
@@ -2238,7 +2244,7 @@ export default function Home() {
         period: timeBucket.period,
         block: timeBucket.block
       });
-      openOutcomeForm({ mode: 'negative', outcome: NO_CONTESTA_KEY });
+      openOutcomeForm({ mode: 'neutral', outcome: NO_CONTESTA_KEY });
     });
 
     call.on('ringing', () => {
@@ -2264,7 +2270,7 @@ export default function Home() {
       console.error('❌ Error en call:', error);
       setIsCallInProgress(false);
       updateStatus('error', 'Error');
-      openOutcomeForm({ mode: 'negative', outcome: NO_CONTESTA_KEY });
+      openOutcomeForm({ mode: 'neutral', outcome: NO_CONTESTA_KEY });
     });
   };
 
@@ -2331,6 +2337,7 @@ export default function Home() {
   );
 
   const POSITIVE_BUCKETS = new Set(['interesado', 'agendado', 'publicada', 'reservada', 'arrendada']);
+  const NEUTRAL_BUCKETS = new Set(['no_contesta', 'futuro']);
   const NO_CONTESTA_KEY = 'no_contesta';
   const FUTURE_KEY = 'disponibilidad_futura';
   const LOST_KEYS = new Set(['informacion_falsa', 'le_parece_caro', 'intentos_max']);
@@ -2353,7 +2360,8 @@ export default function Home() {
     return Array.from(map.values());
   }, [callOutcomes]);
   const positiveOutcomes = allOutcomes.filter((item) => POSITIVE_BUCKETS.has(item.metric_bucket));
-  const negativeOutcomes = allOutcomes.filter((item) => !POSITIVE_BUCKETS.has(item.metric_bucket));
+  const neutralOutcomes = allOutcomes.filter((item) => NEUTRAL_BUCKETS.has(item.metric_bucket));
+  const negativeOutcomes = allOutcomes.filter((item) => !POSITIVE_BUCKETS.has(item.metric_bucket) && !NEUTRAL_BUCKETS.has(item.metric_bucket));
   const MAX_GESTIONS = Number(process.env.NEXT_PUBLIC_DIALER_MAX_GESTIONS || 5);
 
   const totalCalls = callHistory.length;
@@ -3036,10 +3044,20 @@ export default function Home() {
           justify-content: center;
           gap: 8px;
         }
-        .toggle-btn.active {
-          border-color: var(--accent);
-          background: rgba(249, 71, 47, 0.15);
-          color: var(--text-primary);
+        .toggle-positive.active {
+          border-color: var(--success, #22c55e);
+          background: rgba(34, 197, 94, 0.12);
+          color: var(--success, #22c55e);
+        }
+        .toggle-neutral.active {
+          border-color: #f59e0b;
+          background: rgba(245, 158, 11, 0.12);
+          color: #f59e0b;
+        }
+        .toggle-negative.active {
+          border-color: var(--danger, #ef4444);
+          background: rgba(239, 68, 68, 0.12);
+          color: var(--danger, #ef4444);
         }
         .outcome-grid {
           display: flex;
@@ -4837,7 +4855,7 @@ export default function Home() {
 
                     <div className="outcome-toggle">
                       <button
-                        className={`toggle-btn ${callOutcomeMode === 'positive' ? 'active' : ''}`}
+                        className={`toggle-btn toggle-positive ${callOutcomeMode === 'positive' ? 'active' : ''}`}
                         onClick={() => {
                           setCallOutcomeMode('positive');
                           setSelectedOutcome('');
@@ -4852,7 +4870,22 @@ export default function Home() {
                         <ThumbsUp className="icon-sm" /> Positivo
                       </button>
                       <button
-                        className={`toggle-btn ${callOutcomeMode === 'negative' ? 'active' : ''}`}
+                        className={`toggle-btn toggle-neutral ${callOutcomeMode === 'neutral' ? 'active' : ''}`}
+                        onClick={() => {
+                          setCallOutcomeMode('neutral');
+                          setSelectedOutcome('');
+                          setRetryDelay('');
+                          setFutureDelay('');
+                          setAvailabilityDecision('keep');
+                          setSelectedStageId('');
+                          setSelectedLostReason('');
+                          setFormError('');
+                        }}
+                      >
+                        <Circle className="icon-sm" /> Neutro
+                      </button>
+                      <button
+                        className={`toggle-btn toggle-negative ${callOutcomeMode === 'negative' ? 'active' : ''}`}
                         onClick={() => {
                           setCallOutcomeMode('negative');
                           setSelectedOutcome('');
@@ -4870,7 +4903,7 @@ export default function Home() {
 
                     {callOutcomeMode && (
                       <div className="outcome-grid">
-                        {(callOutcomeMode === 'positive' ? positiveOutcomes : negativeOutcomes).map((outcome) => (
+                        {(callOutcomeMode === 'positive' ? positiveOutcomes : callOutcomeMode === 'neutral' ? neutralOutcomes : negativeOutcomes).map((outcome) => (
                           <button
                             key={outcome.key}
                             className={`outcome-pill ${selectedOutcome === outcome.key ? 'active' : ''}`}
