@@ -119,6 +119,9 @@ export default function Home() {
   const campaignTimerRef = useRef(null);
   const campaignJoinedRef = useRef(false);
   const completedDealsRef = useRef(new Set());
+  const twilioDeviceRef = useRef(null);
+  const currentLeadRef = useRef(null);
+  const callerIdRef = useRef('');
   const router = useRouter();
   const paisRef = useRef('');
   const isManagerRole = userRole === 'admin' || userRole === 'supervisor';
@@ -292,6 +295,18 @@ export default function Home() {
   useEffect(() => {
     campaignJoinedRef.current = campaignJoined;
   }, [campaignJoined]);
+
+  useEffect(() => {
+    twilioDeviceRef.current = twilioDevice;
+  }, [twilioDevice]);
+
+  useEffect(() => {
+    currentLeadRef.current = currentLead;
+  }, [currentLead]);
+
+  useEffect(() => {
+    callerIdRef.current = callerId;
+  }, [callerId]);
 
   useEffect(() => {
     setCurrentLead(null);
@@ -1114,15 +1129,21 @@ export default function Home() {
 
   // Hacer llamada
   const makeCall = (options = {}) => {
+    // Usar refs para evitar stale closures (llamado desde setInterval en autoCallCountdown)
+    const device = twilioDeviceRef.current;
+    const lead = currentLeadRef.current;
+    const cid = callerIdRef.current;
+
     if (!campaignJoinedRef.current) {
       showActionToast('Debes unirte a una campaña antes de llamar.');
       return;
     }
-    if (!twilioDevice || !currentLead) {
+    if (!device || !lead) {
+      console.warn('makeCall: device=', !!device, 'lead=', !!lead);
       alert('No hay Twilio Device o lead');
       return;
     }
-    if (!callerId) {
+    if (!cid) {
       alert('No tienes Caller ID asignado. Pide que lo configuren en Twilio.');
       return;
     }
@@ -1133,9 +1154,9 @@ export default function Home() {
     autoCallCancelCountRef.current = 0;
 
     console.log('📞 Iniciando llamada...');
-    console.log('  Lead:', currentLead);
-    console.log('  Teléfono:', currentLead.telefono);
-    console.log('  Caller ID:', callerId);
+    console.log('  Lead:', lead);
+    console.log('  Teléfono:', lead.telefono);
+    console.log('  Caller ID:', cid);
 
     setCallStatus('Llamando...');
     setIsCallInProgress(true);
@@ -1144,9 +1165,9 @@ export default function Home() {
     updateStatus('dialing', 'Llamando');
     const timeBucket = getTimeBucket(getLeadTimezone());
     trackEvent('call_started', {
-      dealId: currentLead.pipedriveDealId,
-      phone: currentLead.telefono || '',
-      callerId,
+      dealId: lead.pipedriveDealId,
+      phone: lead.telefono || '',
+      callerId: cid,
       period: timeBucket.period,
       block: timeBucket.block
     });
@@ -1155,13 +1176,13 @@ export default function Home() {
     // En Voice SDK 2.x, los parámetros personalizados van dentro de 'params'
     const callParams = {
       params: {
-        To: currentLead.telefono,
-        From: callerId
+        To: lead.telefono,
+        From: cid
       }
     };
 
     console.log('  Parámetros de llamada:', callParams);
-    const callOrPromise = twilioDevice.connect(callParams);
+    const callOrPromise = device.connect(callParams);
     if (callOrPromise && typeof callOrPromise.then === 'function') {
       callOrPromise.then((call) => attachCallHandlers(call));
     } else if (callOrPromise) {
@@ -1174,7 +1195,7 @@ export default function Home() {
     console.log('🔴 Intentando colgar...');
     console.log('  activeCall (state):', activeCall);
     console.log('  activeCall (ref):', activeCallRef.current);
-    console.log('  twilioDevice:', twilioDevice);
+    console.log('  twilioDevice:', twilioDeviceRef.current);
     console.log('  isCallInProgress:', isCallInProgress);
     console.log('  callDuration:', callDuration);
 
@@ -1193,9 +1214,10 @@ export default function Home() {
       }
 
       // 2. Si no hay call, intentar desconectar todas las llamadas del device
-      if (twilioDevice) {
+      const device = twilioDeviceRef.current;
+      if (device) {
         console.log('📴 Ejecutando device.disconnectAll()...');
-        twilioDevice.disconnectAll();
+        device.disconnectAll();
         console.log('✅ Device.disconnectAll() ejecutado');
       }
 
