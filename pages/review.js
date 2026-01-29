@@ -8,10 +8,10 @@ import { buildPhoneCandidates, getCountryConfig } from '../lib/review';
 
 const AGE_FILTERS = [
   { value: 'all', label: 'Todos' },
-  { value: 'lt7', label: 'Menos de 7 dias' },
-  { value: 'between7_15', label: 'De 7 a 15 dias' },
-  { value: 'between15_30', label: 'De 15 dias a 30 dias' },
-  { value: 'gt30', label: 'Mas de 30 dias' }
+  { value: 'lt7', label: '0 – 6 dias' },
+  { value: 'between7_15', label: '7 – 15 dias' },
+  { value: 'between15_30', label: '16 – 30 dias' },
+  { value: 'gt30', label: '31+ dias' }
 ];
 
 const COUNTRY_OPTIONS = [
