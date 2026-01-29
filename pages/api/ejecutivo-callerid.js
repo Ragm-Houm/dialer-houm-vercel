@@ -50,10 +50,16 @@ export default async function handler(req, res) {
     });
 
     if (!callerIdMatch) {
-      console.log('No se encontró Caller ID con friendly name:', email);
-      return res.status(404).json({
-        error: 'No se encontró Caller ID verificado con ese email como friendly name',
-        hint: 'Verifica que el Caller ID en Twilio tenga el email como Friendly Name'
+      console.log('No se encontró Caller ID con friendly name:', verifiedEmail);
+      // Devolver la lista completa para que el usuario seleccione manualmente
+      return res.status(200).json({
+        email: verifiedEmail,
+        callerId: null,
+        matched: false,
+        availableCallerIds: callerIds.map(c => ({
+          phoneNumber: c.phoneNumber,
+          friendlyName: c.friendlyName
+        }))
       });
     }
 
@@ -62,7 +68,8 @@ export default async function handler(req, res) {
     res.status(200).json({
       email: verifiedEmail,
       callerId: callerIdMatch.phoneNumber,
-      friendlyName: callerIdMatch.friendlyName
+      friendlyName: callerIdMatch.friendlyName,
+      matched: true
     });
   } catch (error) {
     console.error('Error obteniendo Caller ID del ejecutivo:', error);

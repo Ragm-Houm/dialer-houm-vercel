@@ -67,6 +67,8 @@ export default function Home() {
   const [skipReason, setSkipReason] = useState('');
   const [callerIdLoading, setCallerIdLoading] = useState(false);
   const [callerIdError, setCallerIdError] = useState('');
+  const [callerIdMatched, setCallerIdMatched] = useState(false);
+  const [availableCallerIds, setAvailableCallerIds] = useState([]);
   const [authError, setAuthError] = useState('');
   const [callHistory, setCallHistory] = useState([]);
   const [callDuration, setCallDuration] = useState(0);
@@ -548,8 +550,10 @@ export default function Home() {
       setCallerIdLoading(true);
       setCallerIdError('');
       setCallerId('');
+      setCallerIdMatched(false);
+      setAvailableCallerIds([]);
 
-      fetch(
+      csrfFetch(
         `/api/ejecutivo-callerid?email=${encodeURIComponent(email)}`
       )
         .then(res => res.json())
@@ -558,16 +562,21 @@ export default function Home() {
           if (data.callerId) {
             console.log('✅ Caller ID asignado:', data.callerId);
             setCallerId(data.callerId);
+            setCallerIdMatched(true);
             setCallerIdError('');
-          } else if (data.error) {
-            console.log('❌ Error:', data.error);
-            setCallerIdError(data.error);
+          } else {
+            console.log('⚠️ Sin Caller ID asignado');
+            setCallerIdMatched(false);
+            setCallerIdError('Sin Caller ID asignado');
+            if (data.availableCallerIds && data.availableCallerIds.length > 0) {
+              setAvailableCallerIds(data.availableCallerIds);
+            }
           }
         })
         .catch(err => {
           setCallerIdLoading(false);
           console.log('❌ Error cargando Caller ID:', err.message);
-          setCallerIdError('Error al cargar Caller ID. Verifica tu email.');
+          setCallerIdError('Error al cargar Caller ID');
         });
     } else {
       setCallerId('');
@@ -1726,6 +1735,10 @@ export default function Home() {
   const handleJoinCampaign = async () => {
     if (!selectedCampaignKey) {
       showActionToast('Selecciona una campaña para unirte.');
+      return;
+    }
+    if (!callerIdRef.current) {
+      showActionToast('Necesitas un Caller ID para unirte a la campaña.');
       return;
     }
     clearAutoCallCountdown();
@@ -3572,6 +3585,36 @@ export default function Home() {
           color: var(--danger);
           font-weight: 600;
         }
+        .callerid-status {
+          display: grid;
+          gap: 8px;
+        }
+        .callerid-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          border-radius: 10px;
+          font-size: 12px;
+          font-weight: 600;
+          border: 1px solid var(--border-subtle);
+          background: var(--surface-soft);
+        }
+        .callerid-ok {
+          color: var(--success, #22c55e);
+          border-color: var(--success, #22c55e);
+          background: var(--success-soft, rgba(34, 197, 94, 0.08));
+        }
+        .callerid-error {
+          color: var(--danger, #ef4444);
+          border-color: var(--danger, #ef4444);
+          background: var(--danger-soft, rgba(239, 68, 68, 0.08));
+        }
+        .callerid-label {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
         .next-lead-header {
           display: flex;
           align-items: center;
@@ -4733,11 +4776,21 @@ export default function Home() {
                     <h2 style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
                       <Inbox className="icon-lg" /> Selecciona una campaña
                     </h2>
-                    <p>Para iniciar, elige una campaña activa y pulsa “Unirse a campaña”.</p>
+                    <p>Para iniciar, elige una campaña activa y pulsa &quot;Unirse a campaña&quot;.</p>
+                    {!callerId && !callerIdLoading && (
+                      <div className="callerid-row callerid-error">
+                        <XCircle className="icon-sm" />
+                        <span className="callerid-label">
+                          {availableCallerIds.length > 0
+                            ? 'Selecciona un Caller ID en el panel derecho'
+                            : 'Sin Caller ID disponible'}
+                        </span>
+                      </div>
+                    )}
                     <button
                       className="btn btn-primary"
                       onClick={handleJoinCampaign}
-                      disabled={!selectedCampaignKey}
+                      disabled={!selectedCampaignKey || !callerId}
                     >
                       Unirse a campaña
                     </button>
@@ -5390,10 +5443,50 @@ export default function Home() {
                     ))}
                   </select>
                   {campaignError && <div className="campaign-error">{campaignError}</div>}
+
+                  {/* Caller ID status */}
+                  <div className="callerid-status">
+                    {callerIdLoading ? (
+                      <div className="callerid-row">
+                        <Loader2 className="icon-sm spin" />
+                        <span className="callerid-label">Verificando Caller ID...</span>
+                      </div>
+                    ) : callerId ? (
+                      <div className="callerid-row callerid-ok">
+                        <CheckCircle2 className="icon-sm" />
+                        <span className="callerid-label">Caller ID: {callerId}</span>
+                      </div>
+                    ) : (
+                      <div className="callerid-row callerid-error">
+                        <XCircle className="icon-sm" />
+                        <span className="callerid-label">Sin Caller ID asignado</span>
+                      </div>
+                    )}
+                    {!callerId && !callerIdLoading && availableCallerIds.length > 0 && (
+                      <select
+                        className="campaign-select"
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            setCallerId(e.target.value);
+                            setCallerIdError('');
+                          }
+                        }}
+                      >
+                        <option value="">Seleccionar Caller ID</option>
+                        {availableCallerIds.map((c) => (
+                          <option key={c.phoneNumber} value={c.phoneNumber}>
+                            {c.phoneNumber} ({c.friendlyName})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
                   <button
                     className="btn btn-primary btn-full"
                     onClick={handleJoinCampaign}
-                    disabled={!selectedCampaignKey || campaignJoined}
+                    disabled={!selectedCampaignKey || campaignJoined || !callerId}
                   >
                     {campaignJoined ? 'En campaña' : 'Unirse a campaña'}
                   </button>
