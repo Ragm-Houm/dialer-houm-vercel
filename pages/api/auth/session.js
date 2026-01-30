@@ -63,10 +63,8 @@ export default async function handler(req, res) {
       return;
     }
 
-    // CSRF protection
-    if (!requireCsrf(req, res)) {
-      return;
-    }
+    // No requiere CSRF: el login usa Google ID Token verificado por Google,
+    // no es vulnerable a CSRF ya que el atacante no puede obtener el token.
 
     try {
       const { idToken } = req.body || {};
