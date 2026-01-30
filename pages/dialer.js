@@ -92,6 +92,7 @@ export default function Home() {
   const [selectedStageId, setSelectedStageId] = useState('');
   const [lostReasons, setLostReasons] = useState([]);
   const [selectedLostReason, setSelectedLostReason] = useState('');
+  const [selectedOwnerId, setSelectedOwnerId] = useState('');
   const [autoCallCountdown, setAutoCallCountdown] = useState(null);
   const [autoCallMessage, setAutoCallMessage] = useState('');
   const autoCallTimerRef = useRef(null);
@@ -1398,6 +1399,7 @@ export default function Home() {
     setAvailabilityDecision('keep');
     setSelectedStageId('');
     setSelectedLostReason('');
+    setSelectedOwnerId('');
     setFormError('');
   };
 
@@ -1411,13 +1413,7 @@ export default function Home() {
       setSelectedOutcome(options.outcome);
       if (!options.mode) {
         const outcomeDef = getOutcomeByKey(options.outcome);
-        if (POSITIVE_BUCKETS.has(outcomeDef.metric_bucket)) {
-          setCallOutcomeMode('positive');
-        } else if (NEUTRAL_BUCKETS.has(outcomeDef.metric_bucket)) {
-          setCallOutcomeMode('neutral');
-        } else {
-          setCallOutcomeMode('negative');
-        }
+        setCallOutcomeMode(getOutcomeCategory(outcomeDef));
       }
     }
     setShowSkipForm(false);
@@ -1445,12 +1441,15 @@ export default function Home() {
     }
 
     const outcomeDef = getOutcomeByKey(selectedOutcome);
-    const isPositive = POSITIVE_BUCKETS.has(outcomeDef.metric_bucket);
-    const isNoContesta = selectedOutcome === NO_CONTESTA_KEY;
-    const isFuture = selectedOutcome === FUTURE_KEY;
-    const isLost = LOST_KEYS.has(selectedOutcome) || (isFuture && availabilityDecision === 'lose');
+    const config = getActionConfig(outcomeDef);
+    const category = getOutcomeCategory(outcomeDef);
+    const isPositive = category === 'positive';
+    const isNoContesta = !!config.require_retry_time;
+    const isFuture = !!config.require_future_delay;
+    const isLost = !!config.mark_lost || (isFuture && availabilityDecision === 'lose');
     const requiresStage =
-      (isPositive && isNoContestaStage()) ||
+      (config.change_stage === 'required') ||
+      (config.change_stage === 'optional' && isPositive && isNoContestaStage()) ||
       (availabilityDecision === 'move' && isFuture);
 
     const projectedGestiones = (currentLead?.gestiones || 0) + 1;
@@ -1471,7 +1470,7 @@ export default function Home() {
       setFormError('Selecciona la etapa de destino.');
       return;
     }
-    if (isLost && !selectedLostReason) {
+    if (isLost && config.require_lost_reason && !selectedLostReason) {
       setFormError('Selecciona el motivo de pérdida.');
       return;
     }
@@ -1509,20 +1508,22 @@ export default function Home() {
       return {};
     })();
 
-    const shouldAssignOwner = isPositive || isLost;
+    // Determinar owner: si el user seleccionó uno, usar ese; sino auto-asignar al ejecutivo
+    const shouldAssignOwner = !!config.assign_owner || isLost;
     const execUser = dealUsers.find((user) => (user.email || '').toLowerCase() === email.toLowerCase());
     const execUserId = execUser?.id || null;
+    const finalOwnerId = selectedOwnerId ? Number(selectedOwnerId) : (shouldAssignOwner ? execUserId : null);
 
-    if (shouldAssignOwner && !execUserId) {
+    if (shouldAssignOwner && !finalOwnerId) {
       showActionToast('No se encontró el usuario en Pipedrive para asignar responsable.');
     }
 
     try {
-      if (shouldAssignOwner && execUserId) {
+      if (finalOwnerId) {
         await csrfFetch('/api/pipedrive-deal', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dealId: currentLead?.pipedriveDealId, ownerId: execUserId })
+          body: JSON.stringify({ dealId: currentLead?.pipedriveDealId, ownerId: finalOwnerId })
         });
         addActionLog('Responsable actualizado en Pipedrive');
       }
@@ -1560,7 +1561,7 @@ export default function Home() {
         addActionLog('Negocio marcado como perdido en Pipedrive');
       }
 
-      const forceDone = isPositive || isLost || isFuture;
+      const forceDone = !!config.mark_done || isLost || isFuture;
       const completionRes = await csrfFetch('/api/campaign-complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2336,22 +2337,24 @@ export default function Home() {
     </div>
   );
 
+  // Legacy fallback Sets — usados solo cuando action_config está vacío
   const POSITIVE_BUCKETS = new Set(['interesado', 'agendado', 'publicada', 'reservada', 'arrendada']);
   const NEUTRAL_BUCKETS = new Set(['no_contesta', 'futuro']);
   const NO_CONTESTA_KEY = 'no_contesta';
   const FUTURE_KEY = 'disponibilidad_futura';
   const LOST_KEYS = new Set(['informacion_falsa', 'le_parece_caro', 'intentos_max']);
+
   const DEFAULT_OUTCOMES = [
-    { key: 'interesado', label: 'Interesado', outcome_type: 'final', metric_bucket: 'interesado' },
-    { key: 'fotos_agendadas', label: 'Fotos agendadas', outcome_type: 'final', metric_bucket: 'agendado' },
-    { key: 'propiedad_publicada', label: 'Propiedad publicada', outcome_type: 'final', metric_bucket: 'publicada' },
-    { key: 'propiedad_reservada', label: 'Propiedad reservada', outcome_type: 'final', metric_bucket: 'reservada' },
-    { key: 'propiedad_arrendada', label: 'Propiedad arrendada', outcome_type: 'final', metric_bucket: 'arrendada' },
-    { key: 'no_contesta', label: 'No contesta', outcome_type: 'intermediate', metric_bucket: 'no_contesta' },
-    { key: 'disponibilidad_futura', label: 'Disponibilidad futura', outcome_type: 'intermediate', metric_bucket: 'futuro' },
-    { key: 'informacion_falsa', label: 'Información falsa', outcome_type: 'final', metric_bucket: 'falso' },
-    { key: 'le_parece_caro', label: 'Le parece caro', outcome_type: 'final', metric_bucket: 'caro' },
-    { key: 'intentos_max', label: 'Intentos máximos', outcome_type: 'final', metric_bucket: 'perdido' }
+    { key: 'interesado', label: 'Interesado', outcome_type: 'final', metric_bucket: 'interesado', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
+    { key: 'fotos_agendadas', label: 'Fotos agendadas', outcome_type: 'final', metric_bucket: 'agendado', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
+    { key: 'propiedad_publicada', label: 'Propiedad publicada', outcome_type: 'final', metric_bucket: 'publicada', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
+    { key: 'propiedad_reservada', label: 'Propiedad reservada', outcome_type: 'final', metric_bucket: 'reservada', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
+    { key: 'propiedad_arrendada', label: 'Propiedad arrendada', outcome_type: 'final', metric_bucket: 'arrendada', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
+    { key: 'no_contesta', label: 'No contesta', outcome_type: 'intermediate', metric_bucket: 'no_contesta', category: 'neutral', action_config: { assign_owner: false, allow_change_owner: false, change_stage: 'no', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: true, mark_done: false, allow_retry: true, require_retry_time: true, require_future_delay: false } },
+    { key: 'disponibilidad_futura', label: 'Disponibilidad futura', outcome_type: 'intermediate', metric_bucket: 'futuro', category: 'neutral', action_config: { assign_owner: false, allow_change_owner: false, change_stage: 'no', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: true, mark_done: false, allow_retry: false, require_retry_time: false, require_future_delay: true } },
+    { key: 'informacion_falsa', label: 'Información falsa', outcome_type: 'final', metric_bucket: 'falso', category: 'negative', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'no', log_pipedrive: true, mark_lost: true, require_lost_reason: true, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
+    { key: 'le_parece_caro', label: 'Le parece caro', outcome_type: 'final', metric_bucket: 'caro', category: 'negative', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'no', log_pipedrive: true, mark_lost: true, require_lost_reason: true, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
+    { key: 'intentos_max', label: 'Intentos máximos', outcome_type: 'final', metric_bucket: 'perdido', category: 'negative', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'no', log_pipedrive: true, mark_lost: true, require_lost_reason: true, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } }
   ];
   const allOutcomes = useMemo(() => {
     const map = new Map();
@@ -2359,15 +2362,41 @@ export default function Home() {
     (callOutcomes || []).forEach((item) => map.set(item.key, item));
     return Array.from(map.values());
   }, [callOutcomes]);
-  const positiveOutcomes = allOutcomes.filter((item) => POSITIVE_BUCKETS.has(item.metric_bucket));
-  const neutralOutcomes = allOutcomes.filter((item) => NEUTRAL_BUCKETS.has(item.metric_bucket));
-  const negativeOutcomes = allOutcomes.filter((item) => !POSITIVE_BUCKETS.has(item.metric_bucket) && !NEUTRAL_BUCKETS.has(item.metric_bucket));
+
+  // Helper: obtener action_config del outcome, con fallback a derivación por metric_bucket
+  const getActionConfig = (outcomeDef) => {
+    if (outcomeDef?.action_config && Object.keys(outcomeDef.action_config).length > 0) {
+      return outcomeDef.action_config;
+    }
+    // Fallback legacy: derivar de metric_bucket
+    if (POSITIVE_BUCKETS.has(outcomeDef?.metric_bucket)) {
+      return { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false };
+    }
+    if (NEUTRAL_BUCKETS.has(outcomeDef?.metric_bucket)) {
+      return { assign_owner: false, allow_change_owner: false, change_stage: 'no', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: true, mark_done: false, allow_retry: outcomeDef?.metric_bucket === 'no_contesta', require_retry_time: outcomeDef?.metric_bucket === 'no_contesta', require_future_delay: outcomeDef?.metric_bucket === 'futuro' };
+    }
+    return { assign_owner: true, allow_change_owner: true, change_stage: 'no', log_pipedrive: true, mark_lost: true, require_lost_reason: true, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false };
+  };
+
+  // Helper: obtener categoría del outcome
+  const getOutcomeCategory = (outcomeDef) => {
+    if (outcomeDef?.category) return outcomeDef.category;
+    // Fallback legacy
+    if (POSITIVE_BUCKETS.has(outcomeDef?.metric_bucket)) return 'positive';
+    if (NEUTRAL_BUCKETS.has(outcomeDef?.metric_bucket)) return 'neutral';
+    return 'negative';
+  };
+
+  const positiveOutcomes = allOutcomes.filter((item) => getOutcomeCategory(item) === 'positive');
+  const neutralOutcomes = allOutcomes.filter((item) => getOutcomeCategory(item) === 'neutral');
+  const negativeOutcomes = allOutcomes.filter((item) => getOutcomeCategory(item) === 'negative');
   const MAX_GESTIONS = Number(process.env.NEXT_PUBLIC_DIALER_MAX_GESTIONS || 5);
 
   const totalCalls = callHistory.length;
-  const isContactado = (resultado) => POSITIVE_BUCKETS.has(
-    (allOutcomes.find((item) => item.key === resultado)?.metric_bucket) || ''
-  );
+  const isContactado = (resultado) => {
+    const def = allOutcomes.find((item) => item.key === resultado);
+    return getOutcomeCategory(def) === 'positive';
+  };
   const contactadosCount = callHistory.filter(call => isContactado(call.resultado)).length;
   const noContestaCount = callHistory.filter(call => call.resultado === 'no_contesta').length;
   const selectedCampaign = useMemo(
@@ -2380,24 +2409,27 @@ export default function Home() {
   const campaignProgress = campaignTotal ? Math.round((campaignHandled / campaignTotal) * 100) : 0;
   const sleepingLeads = campaignAvailability?.cooldown || 0;
   const selectedOutcomeDef = selectedOutcome ? getOutcomeByKey(selectedOutcome) : null;
-  const outcomeIsPositive = selectedOutcomeDef ? POSITIVE_BUCKETS.has(selectedOutcomeDef.metric_bucket) : false;
-  const outcomeIsNoContesta = selectedOutcome === NO_CONTESTA_KEY;
-  const outcomeIsFuture = selectedOutcome === FUTURE_KEY;
+  const selectedConfig = selectedOutcomeDef ? getActionConfig(selectedOutcomeDef) : {};
+  const selectedCategory = selectedOutcomeDef ? getOutcomeCategory(selectedOutcomeDef) : '';
+  const outcomeIsPositive = selectedCategory === 'positive';
+  const outcomeIsNoContesta = selectedOutcome === NO_CONTESTA_KEY || !!selectedConfig.require_retry_time;
+  const outcomeIsFuture = selectedOutcome === FUTURE_KEY || !!selectedConfig.require_future_delay;
   const outcomeIsLost = selectedOutcome
-    ? LOST_KEYS.has(selectedOutcome) || (outcomeIsFuture && availabilityDecision === 'lose')
+    ? (!!selectedConfig.mark_lost) || (outcomeIsFuture && availabilityDecision === 'lose')
     : false;
+  const outcomeShowChangeOwner = !!selectedConfig.allow_change_owner;
   const outcomeRequiresStage = selectedOutcome
-    ? (outcomeIsPositive && isNoContestaStage()) || (outcomeIsFuture && availabilityDecision === 'move')
+    ? (selectedConfig.change_stage === 'required') || (selectedConfig.change_stage === 'optional' && outcomeIsPositive && isNoContestaStage()) || (outcomeIsFuture && availabilityDecision === 'move')
     : false;
   const showStageSelector = selectedOutcome
-    ? outcomeIsPositive || (outcomeIsFuture && availabilityDecision === 'move')
+    ? (selectedConfig.change_stage === 'optional' || selectedConfig.change_stage === 'required') || (outcomeIsFuture && availabilityDecision === 'move')
     : false;
   const isSaveDisabled =
     !selectedOutcome ||
-    (outcomeIsNoContesta && !retryDelay) ||
-    (outcomeIsFuture && !futureDelay) ||
+    (outcomeIsNoContesta && selectedConfig.require_retry_time && !retryDelay) ||
+    (outcomeIsFuture && selectedConfig.require_future_delay && !futureDelay) ||
     (outcomeRequiresStage && !selectedStageId) ||
-    (outcomeIsLost && !selectedLostReason);
+    (outcomeIsLost && selectedConfig.require_lost_reason && !selectedLostReason);
 
   if (!isSessionReady) {
     return (
@@ -4924,7 +4956,7 @@ export default function Home() {
                       </div>
                     )}
 
-                    {selectedOutcome === NO_CONTESTA_KEY && (
+                    {outcomeIsNoContesta && (
                       <div className="retry-panel">
                         <div className="field-label">Reintentar luego</div>
                         <div className="outcome-grid compact">
@@ -4939,13 +4971,15 @@ export default function Home() {
                             </button>
                           ))}
                         </div>
-                        <button className="btn btn-secondary btn-retry" type="button" onClick={handleRetryNow}>
-                          Reintentar ahora
-                        </button>
+                        {selectedConfig.allow_retry && (
+                          <button className="btn btn-secondary btn-retry" type="button" onClick={handleRetryNow}>
+                            Reintentar ahora
+                          </button>
+                        )}
                       </div>
                     )}
 
-                    {selectedOutcome === FUTURE_KEY && (
+                    {outcomeIsFuture && (
                       <div className="retry-panel">
                         <div className="field-label">Disponibilidad futura</div>
                         <div className="outcome-grid compact">
@@ -5011,6 +5045,26 @@ export default function Home() {
                           {currentLead.pipedrive.stages.map((stage) => (
                             <option key={stage.id} value={stage.id}>
                               {stage.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {outcomeShowChangeOwner && dealUsers.length > 0 && (
+                      <div className="form-group">
+                        <label className="field-label">
+                          <span className="label-icon"><User className="icon-sm" /></span>
+                          Cambiar responsable (opcional)
+                        </label>
+                        <select
+                          value={selectedOwnerId}
+                          onChange={(e) => setSelectedOwnerId(e.target.value)}
+                        >
+                          <option value="">Auto-asignar a mi</option>
+                          {dealUsers.map((user) => (
+                            <option key={user.id} value={user.id}>
+                              {user.name} {user.email ? `(${user.email})` : ''}
                             </option>
                           ))}
                         </select>

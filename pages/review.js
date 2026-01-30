@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { ChevronRight, Loader2, ShieldAlert, Trash2 } from 'lucide-react';
+import { ChevronRight, Loader2, ShieldAlert, Trash2, Plus, User, BarChart3, Phone, XCircle, CheckCircle2, Clock, CalendarClock, RotateCcw, FileText, Zap, ToggleLeft, ToggleRight } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import { useSession } from '../lib/session';
 import { buildPhoneCandidates, getCountryConfig } from '../lib/review';
@@ -392,6 +392,7 @@ export default function ReviewPage() {
   const [newOutcomeLabel, setNewOutcomeLabel] = useState('');
   const [newOutcomeType, setNewOutcomeType] = useState('final');
   const [newOutcomeBucket, setNewOutcomeBucket] = useState('otro');
+  const [newOutcomeCategory, setNewOutcomeCategory] = useState('negative');
   const [outcomeError, setOutcomeError] = useState('');
   const wizardRestoreRef = useRef(false);
   const wizardStorageKey = useMemo(() => (email ? `reviewWizard:${email}` : 'reviewWizard'), [email]);
@@ -1192,7 +1193,8 @@ export default function ReviewPage() {
         body: JSON.stringify({
           label: newOutcomeLabel.trim(),
           outcomeType: newOutcomeType,
-          metricBucket: newOutcomeBucket
+          metricBucket: newOutcomeBucket,
+          category: newOutcomeCategory
         })
       });
       const data = await res.json();
@@ -1203,6 +1205,7 @@ export default function ReviewPage() {
       setNewOutcomeLabel('');
       setNewOutcomeType('final');
       setNewOutcomeBucket('otro');
+      setNewOutcomeCategory('negative');
       loadOutcomes();
     } catch (error) {
       console.error('Error creando outcome:', error);
@@ -1241,7 +1244,9 @@ export default function ReviewPage() {
           outcomeType: updates.outcome_type,
           metricBucket: updates.metric_bucket,
           sortOrder: updates.sort_order,
-          activo: updates.activo
+          activo: updates.activo,
+          category: updates.category,
+          actionConfig: updates.action_config
         })
       });
       const data = await res.json();
@@ -1256,6 +1261,47 @@ export default function ReviewPage() {
       console.error('Error actualizando outcome:', error);
       setOutcomeError('Error actualizando estado');
     }
+  };
+
+  // Helper para toggle de una acción en el action_config de un outcome
+  const toggleActionConfig = (outcome, key, value) => {
+    const config = { ...(outcome.action_config || {}) };
+    if (value !== undefined) {
+      config[key] = value;
+    } else {
+      config[key] = !config[key];
+    }
+    // Dependencias: si mark_lost es false, desactivar require_lost_reason
+    if (key === 'mark_lost' && !config.mark_lost) config.require_lost_reason = false;
+    if (key === 'assign_owner' && !config.assign_owner) config.allow_change_owner = false;
+    updateOutcome(outcome.id, { ...outcome, action_config: config });
+  };
+
+  // Definición de las acciones disponibles para mostrar en el UI
+  const ACTION_STEPS = [
+    { key: 'assign_owner', label: 'Auto-asignar responsable', icon: User, type: 'toggle' },
+    { key: 'allow_change_owner', label: 'Permitir cambiar responsable', icon: User, type: 'toggle', depends: 'assign_owner' },
+    { key: 'change_stage', label: 'Cambiar etapa Pipedrive', icon: BarChart3, type: 'select', options: [{ value: 'no', label: 'No' }, { value: 'optional', label: 'Opcional' }, { value: 'required', label: 'Obligatorio' }] },
+    { key: 'log_pipedrive', label: 'Registrar llamada en Pipedrive', icon: Phone, type: 'always' },
+    { key: 'mark_lost', label: 'Marcar como perdido', icon: XCircle, type: 'toggle' },
+    { key: 'require_lost_reason', label: 'Pedir motivo de pérdida', icon: FileText, type: 'toggle', depends: 'mark_lost' },
+    { key: 'create_followup', label: 'Crear tarea de seguimiento', icon: CalendarClock, type: 'toggle' },
+    { key: 'mark_done', label: 'Finalizar lead en campaña', icon: CheckCircle2, type: 'toggle' },
+    { key: 'allow_retry', label: 'Permitir reintento inmediato', icon: RotateCcw, type: 'toggle' },
+    { key: 'require_retry_time', label: 'Pedir tiempo de reintento', icon: Clock, type: 'toggle' },
+    { key: 'require_future_delay', label: 'Pedir plazo futuro', icon: CalendarClock, type: 'toggle' }
+  ];
+
+  const getCategoryEmoji = (cat) => {
+    if (cat === 'positive') return '🟢';
+    if (cat === 'neutral') return '🟡';
+    return '🔴';
+  };
+
+  const getCategoryLabel = (cat) => {
+    if (cat === 'positive') return 'Positivo';
+    if (cat === 'neutral') return 'Neutro';
+    return 'Negativo';
   };
 
   const openDetail = async (campaignKey) => {
@@ -1429,88 +1475,177 @@ export default function ReviewPage() {
 
           <div className="card outcomes-card">
             <div className="history-header">
-              <h2>Creación o eliminación de estados de llamada</h2>
+              <h2><Zap style={{width:18,height:18,verticalAlign:'middle',marginRight:6}} />Resultados de llamada</h2>
               {outcomesLoading && <Loader2 className="icon-sm spin" />}
             </div>
+
             {userRole === 'admin' && (
-              <div className="outcome-form">
+              <div className="outcome-create-bar">
                 <input
                   type="text"
-                  placeholder="Nombre del nuevo estado"
+                  placeholder="Nombre del nuevo resultado..."
                   value={newOutcomeLabel}
                   onChange={(event) => setNewOutcomeLabel(event.target.value)}
+                  className="outcome-create-input"
                 />
-                <select value={newOutcomeType} onChange={(event) => setNewOutcomeType(event.target.value)}>
-                  {OUTCOME_TYPES.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
+                <div className="outcome-create-cats">
+                  {['positive', 'neutral', 'negative'].map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      className={`cat-chip cat-${cat} ${newOutcomeCategory === cat ? 'active' : ''}`}
+                      onClick={() => setNewOutcomeCategory(cat)}
+                    >
+                      {getCategoryEmoji(cat)} {getCategoryLabel(cat)}
+                    </button>
                   ))}
-                </select>
-                <select value={newOutcomeBucket} onChange={(event) => setNewOutcomeBucket(event.target.value)}>
-                  {OUTCOME_BUCKETS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <button className="btn btn-primary" type="button" onClick={createOutcome}>
-                  Agregar estado
+                </div>
+                <div className="outcome-create-selects">
+                  <select value={newOutcomeType} onChange={(event) => setNewOutcomeType(event.target.value)}>
+                    {OUTCOME_TYPES.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <select value={newOutcomeBucket} onChange={(event) => setNewOutcomeBucket(event.target.value)}>
+                    {OUTCOME_BUCKETS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <button className="btn btn-primary" type="button" onClick={createOutcome} disabled={!newOutcomeLabel.trim()}>
+                  <Plus style={{width:14,height:14}} /> Agregar
                 </button>
               </div>
             )}
-            <div className="outcomes-title">Estados actuales</div>
-            <div className="outcomes-grid">
-              {outcomes.map((outcome) => (
-                <div key={outcome.id} className="outcome-chip">
-                  <div className="outcome-name">{outcome.label}</div>
-                  {userRole === 'admin' && (
-                    <div className="outcome-controls">
-                      <select
-                        value={outcome.outcome_type || 'final'}
-                        onChange={(event) =>
-                          updateOutcome(outcome.id, {
-                            ...outcome,
-                            outcome_type: event.target.value
-                          })
-                        }
-                      >
-                        {OUTCOME_TYPES.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={outcome.metric_bucket || 'otro'}
-                        onChange={(event) =>
-                          updateOutcome(outcome.id, {
-                            ...outcome,
-                            metric_bucket: event.target.value
-                          })
-                        }
-                      >
-                        {OUTCOME_BUCKETS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        className="icon-btn subtle-delete"
-                        onClick={() => deleteOutcome(outcome.id)}
-                        aria-label={`Eliminar ${outcome.label}`}
-                      >
-                        <Trash2 className="icon-sm" />
-                      </button>
+
+            {outcomeError && <div className="auth-error" style={{marginTop:8}}>{outcomeError}</div>}
+
+            <div className="zapier-cards">
+              {outcomes.length === 0 && <div className="empty">Sin resultados definidos</div>}
+              {outcomes.map((outcome) => {
+                const config = outcome.action_config || {};
+                const cat = outcome.category || 'negative';
+                return (
+                  <div key={outcome.id} className={`zapier-card zapier-${cat}`}>
+                    <div className="zapier-header">
+                      <div className="zapier-title">
+                        <span className="zapier-emoji">{getCategoryEmoji(cat)}</span>
+                        <span className="zapier-name">{outcome.label}</span>
+                        <span className={`zapier-badge zapier-badge-${cat}`}>{getCategoryLabel(cat)}</span>
+                      </div>
+                      <div className="zapier-header-actions">
+                        {userRole === 'admin' && (
+                          <>
+                            <button
+                              type="button"
+                              className={`zapier-toggle ${outcome.activo !== false ? 'on' : 'off'}`}
+                              onClick={() => updateOutcome(outcome.id, { ...outcome, activo: outcome.activo === false ? true : false })}
+                              title={outcome.activo !== false ? 'Activo' : 'Inactivo'}
+                            >
+                              {outcome.activo !== false
+                                ? <ToggleRight style={{width:22,height:22}} />
+                                : <ToggleLeft style={{width:22,height:22}} />
+                              }
+                            </button>
+                            <button
+                              type="button"
+                              className="icon-btn subtle-delete"
+                              onClick={() => deleteOutcome(outcome.id)}
+                              title={`Eliminar ${outcome.label}`}
+                            >
+                              <Trash2 style={{width:14,height:14}} />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))}
-              {outcomes.length === 0 && <div className="empty">Sin estados definidos</div>}
+
+                    <div className="zapier-steps">
+                      {ACTION_STEPS.map((step, idx) => {
+                        const StepIcon = step.icon;
+                        const isEnabled = step.type === 'always' ? true : (step.type === 'select' ? config[step.key] !== 'no' : !!config[step.key]);
+                        const parentDisabled = step.depends && !config[step.depends];
+                        if (parentDisabled && !config[step.key]) return null;
+
+                        return (
+                          <div key={step.key} className={`zapier-step ${isEnabled ? 'enabled' : 'disabled'} ${parentDisabled ? 'dep-disabled' : ''}`}>
+                            {idx > 0 && <div className="zapier-connector" />}
+                            <div className="zapier-step-row">
+                              <div className="zapier-step-icon">
+                                <StepIcon style={{width:14,height:14}} />
+                              </div>
+                              <div className="zapier-step-label">{step.label}</div>
+                              <div className="zapier-step-control">
+                                {step.type === 'always' && (
+                                  <span className="zapier-always">Siempre</span>
+                                )}
+                                {step.type === 'toggle' && userRole === 'admin' && (
+                                  <button
+                                    type="button"
+                                    className={`zapier-step-toggle ${isEnabled ? 'on' : 'off'}`}
+                                    onClick={() => toggleActionConfig(outcome, step.key)}
+                                    disabled={parentDisabled}
+                                  >
+                                    {isEnabled
+                                      ? <ToggleRight style={{width:20,height:20}} />
+                                      : <ToggleLeft style={{width:20,height:20}} />
+                                    }
+                                  </button>
+                                )}
+                                {step.type === 'toggle' && userRole !== 'admin' && (
+                                  <span className={`zapier-readonly ${isEnabled ? 'on' : 'off'}`}>
+                                    {isEnabled ? '✓' : '✗'}
+                                  </span>
+                                )}
+                                {step.type === 'select' && userRole === 'admin' && (
+                                  <select
+                                    className="zapier-step-select"
+                                    value={config[step.key] || 'no'}
+                                    onChange={(e) => toggleActionConfig(outcome, step.key, e.target.value)}
+                                  >
+                                    {step.options.map((opt) => (
+                                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                  </select>
+                                )}
+                                {step.type === 'select' && userRole !== 'admin' && (
+                                  <span className="zapier-readonly">
+                                    {(step.options.find(o => o.value === (config[step.key] || 'no'))?.label) || 'No'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {userRole === 'admin' && (
+                      <div className="zapier-meta">
+                        <select
+                          value={outcome.outcome_type || 'final'}
+                          onChange={(event) => updateOutcome(outcome.id, { ...outcome, outcome_type: event.target.value })}
+                          className="zapier-meta-select"
+                        >
+                          {OUTCOME_TYPES.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={outcome.metric_bucket || 'otro'}
+                          onChange={(event) => updateOutcome(outcome.id, { ...outcome, metric_bucket: event.target.value })}
+                          className="zapier-meta-select"
+                        >
+                          {OUTCOME_BUCKETS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            {outcomeError && <div className="auth-error">{outcomeError}</div>}
           </div>
         </div>
       </div>
@@ -2444,85 +2579,250 @@ export default function ReviewPage() {
         }
         .outcomes-card h2 {
           margin: 0;
-        }
-        .outcomes-title {
-          font-size: 12px;
-          color: var(--text-subtle);
-          text-transform: uppercase;
-          letter-spacing: 0.4px;
-          margin-bottom: 8px;
-        }
-        .outcomes-grid {
           display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-        .outcome-chip {
-          display: grid;
-          gap: 8px;
-          border: 1px solid var(--border);
-          background: var(--surface-alt);
-          border-radius: 14px;
-          padding: 10px 12px;
-          font-size: 12px;
-          font-weight: 600;
-          color: var(--text-primary);
-          min-width: 220px;
-        }
-        .outcome-name {
-          font-size: 13px;
-          font-weight: 700;
-        }
-        .outcome-controls {
-          display: grid;
-          grid-template-columns: 1fr 1fr auto;
-          gap: 8px;
           align-items: center;
         }
-        .outcome-controls select {
+
+        /* Create bar */
+        .outcome-create-bar {
+          margin-top: 16px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          align-items: center;
+          padding: 14px;
+          background: var(--surface-alt);
+          border-radius: 14px;
+          border: 1px dashed var(--border);
+        }
+        .outcome-create-input {
+          flex: 1;
+          min-width: 180px;
           border-radius: 10px;
           border: 1px solid var(--border);
           background: var(--surface);
           color: var(--text-primary);
-          padding: 6px 8px;
+          padding: 10px 12px;
+          font-size: 13px;
+        }
+        .outcome-create-cats {
+          display: flex;
+          gap: 6px;
+        }
+        .cat-chip {
+          padding: 6px 12px;
+          border-radius: 20px;
+          border: 1.5px solid var(--border);
+          background: transparent;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 600;
+          transition: all 0.15s;
+          color: var(--text-secondary);
+        }
+        .cat-chip.active.cat-positive { border-color: #22c55e; background: rgba(34,197,94,0.12); color: #22c55e; }
+        .cat-chip.active.cat-neutral { border-color: #f59e0b; background: rgba(245,158,11,0.12); color: #f59e0b; }
+        .cat-chip.active.cat-negative { border-color: #ef4444; background: rgba(239,68,68,0.12); color: #ef4444; }
+        .outcome-create-selects {
+          display: flex;
+          gap: 6px;
+        }
+        .outcome-create-selects select {
+          border-radius: 10px;
+          border: 1px solid var(--border);
+          background: var(--surface);
+          color: var(--text-primary);
+          padding: 8px 10px;
           font-size: 12px;
         }
+
+        /* Zapier cards grid */
+        .zapier-cards {
+          margin-top: 20px;
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+          gap: 16px;
+        }
+        .zapier-card {
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          background: var(--surface);
+          overflow: hidden;
+          transition: box-shadow 0.15s;
+        }
+        .zapier-card:hover {
+          box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+        .zapier-positive { border-top: 3px solid #22c55e; }
+        .zapier-neutral { border-top: 3px solid #f59e0b; }
+        .zapier-negative { border-top: 3px solid #ef4444; }
+
+        .zapier-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 14px 16px 10px;
+        }
+        .zapier-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .zapier-emoji {
+          font-size: 16px;
+        }
+        .zapier-name {
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-primary);
+        }
+        .zapier-badge {
+          font-size: 10px;
+          font-weight: 600;
+          padding: 2px 8px;
+          border-radius: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+        }
+        .zapier-badge-positive { background: rgba(34,197,94,0.12); color: #22c55e; }
+        .zapier-badge-neutral { background: rgba(245,158,11,0.12); color: #f59e0b; }
+        .zapier-badge-negative { background: rgba(239,68,68,0.12); color: #ef4444; }
+
+        .zapier-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .zapier-toggle {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 2px;
+          transition: color 0.15s;
+        }
+        .zapier-toggle.on { color: #22c55e; }
+        .zapier-toggle.off { color: var(--text-muted); }
         .icon-btn {
           background: transparent;
           border: none;
           color: var(--danger);
           cursor: pointer;
-          padding: 0;
+          padding: 2px;
         }
         .subtle-delete {
-          opacity: 0.6;
+          opacity: 0.4;
+          transition: opacity 0.15s;
         }
-        .outcome-chip:hover .subtle-delete {
-          opacity: 1;
+        .zapier-card:hover .subtle-delete { opacity: 1; }
+
+        /* Steps */
+        .zapier-steps {
+          padding: 0 16px 12px;
         }
-        .outcome-form {
-          margin-top: 12px;
+        .zapier-step {
+          position: relative;
+        }
+        .zapier-connector {
+          position: absolute;
+          left: 13px;
+          top: -6px;
+          width: 2px;
+          height: 6px;
+          background: var(--border);
+        }
+        .zapier-step-row {
           display: flex;
+          align-items: center;
           gap: 10px;
-          flex-wrap: wrap;
+          padding: 7px 0;
+          border-bottom: 1px solid rgba(128,128,128,0.08);
         }
-        .outcome-form input {
+        .zapier-step:last-child .zapier-step-row {
+          border-bottom: none;
+        }
+        .zapier-step-icon {
+          width: 28px;
+          height: 28px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          background: var(--surface-alt);
+          color: var(--text-secondary);
+        }
+        .zapier-step.enabled .zapier-step-icon {
+          background: rgba(99,102,241,0.12);
+          color: #6366f1;
+        }
+        .zapier-step.disabled .zapier-step-icon {
+          opacity: 0.4;
+        }
+        .zapier-step-label {
           flex: 1;
-          min-width: 180px;
-          border-radius: 12px;
-          border: 1px solid var(--border);
-          background: var(--surface-alt);
+          font-size: 12px;
+          font-weight: 500;
           color: var(--text-primary);
-          padding: 10px 12px;
         }
-        .outcome-form select {
-          min-width: 160px;
-          border-radius: 12px;
+        .zapier-step.disabled .zapier-step-label {
+          color: var(--text-muted);
+          text-decoration: line-through;
+        }
+        .zapier-step.dep-disabled .zapier-step-label {
+          color: var(--text-muted);
+          font-style: italic;
+        }
+        .zapier-step-control {
+          flex-shrink: 0;
+        }
+        .zapier-step-toggle {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 2px;
+          transition: color 0.15s;
+        }
+        .zapier-step-toggle.on { color: #22c55e; }
+        .zapier-step-toggle.off { color: var(--text-muted); }
+        .zapier-step-toggle:disabled { opacity: 0.3; cursor: not-allowed; }
+        .zapier-always {
+          font-size: 10px;
+          font-weight: 600;
+          color: #6366f1;
+          background: rgba(99,102,241,0.1);
+          padding: 2px 8px;
+          border-radius: 10px;
+        }
+        .zapier-readonly {
+          font-size: 11px;
+          font-weight: 600;
+        }
+        .zapier-readonly.on { color: #22c55e; }
+        .zapier-readonly.off { color: var(--text-muted); }
+        .zapier-step-select {
+          border-radius: 8px;
           border: 1px solid var(--border);
           background: var(--surface-alt);
           color: var(--text-primary);
-          padding: 10px 12px;
-          font-size: 13px;
+          padding: 4px 8px;
+          font-size: 11px;
+        }
+
+        /* Meta row */
+        .zapier-meta {
+          display: flex;
+          gap: 6px;
+          padding: 8px 16px 12px;
+          border-top: 1px solid var(--border);
+        }
+        .zapier-meta-select {
+          flex: 1;
+          border-radius: 8px;
+          border: 1px solid var(--border);
+          background: var(--surface-alt);
+          color: var(--text-secondary);
+          padding: 6px 8px;
+          font-size: 11px;
         }
         .history-header {
           display: flex;
