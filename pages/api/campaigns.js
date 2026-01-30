@@ -22,9 +22,20 @@ export default async function handler(req, res) {
       if (!auth.ok) {
         return res.status(auth.status).json({ error: auth.error });
       }
-      const rows = await listCampaigns({ country, status });
+      let rows = await listCampaigns({ country, status });
+
+      // Filtrar campañas expiradas (close_at en el pasado y no sin límite de tiempo)
+      if (status === 'active') {
+        const now = new Date();
+        rows = rows.filter((row) => {
+          if (row.no_time_limit) return true;
+          if (!row.close_at) return true;
+          return new Date(row.close_at) > now;
+        });
+      }
+
       const keys = rows.map((row) => row.campaign_key);
-      const deals = await listCampaignDealsByKeys(keys);
+      const deals = keys.length > 0 ? await listCampaignDealsByKeys(keys) : [];
       const countsByKey = deals.reduce((acc, deal) => {
         if (!acc[deal.campaign_key]) {
           acc[deal.campaign_key] = { total: 0, handled: 0, pending: 0 };
@@ -38,7 +49,13 @@ export default async function handler(req, res) {
         const counts = countsByKey[row.campaign_key] || { total: 0, handled: 0, pending: 0 };
         return { ...row, ...counts };
       });
-      return res.status(200).json({ campaigns: enriched });
+
+      // Si se piden activas, solo mostrar las que tienen leads pendientes
+      const result = status === 'active'
+        ? enriched.filter((c) => c.pending > 0)
+        : enriched;
+
+      return res.status(200).json({ campaigns: result });
     } catch (error) {
       console.error('Error listando campañas:', error);
       return res.status(500).json({ error: error.message });
