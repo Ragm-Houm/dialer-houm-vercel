@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { ChevronRight, Loader2, ShieldAlert, Trash2, Plus, User, BarChart3, Phone, XCircle, CheckCircle2, Clock, CalendarClock, RotateCcw, FileText, Zap, ToggleLeft, ToggleRight } from 'lucide-react';
+import { ChevronRight, Loader2, ShieldAlert, Trash2, Plus, User, BarChart3, Phone, XCircle, CheckCircle2, Clock, CalendarClock, RotateCcw, FileText, Zap, ToggleLeft, ToggleRight, Info, X, Filter } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import { useSession } from '../lib/session';
 import { buildPhoneCandidates, getCountryConfig } from '../lib/review';
@@ -394,6 +394,8 @@ export default function ReviewPage() {
   const [newOutcomeBucket, setNewOutcomeBucket] = useState('otro');
   const [newOutcomeCategory, setNewOutcomeCategory] = useState('negative');
   const [outcomeError, setOutcomeError] = useState('');
+  const [showOutcomeModal, setShowOutcomeModal] = useState(false);
+  const [outcomeCategoryFilter, setOutcomeCategoryFilter] = useState('all');
   const wizardRestoreRef = useRef(false);
   const wizardStorageKey = useMemo(() => (email ? `reviewWizard:${email}` : 'reviewWizard'), [email]);
 
@@ -1206,6 +1208,7 @@ export default function ReviewPage() {
       setNewOutcomeType('final');
       setNewOutcomeBucket('otro');
       setNewOutcomeCategory('negative');
+      setShowOutcomeModal(false);
       loadOutcomes();
     } catch (error) {
       console.error('Error creando outcome:', error);
@@ -1279,17 +1282,17 @@ export default function ReviewPage() {
 
   // Definición de las acciones disponibles para mostrar en el UI
   const ACTION_STEPS = [
-    { key: 'assign_owner', label: 'Auto-asignar responsable', icon: User, type: 'toggle' },
-    { key: 'allow_change_owner', label: 'Permitir cambiar responsable', icon: User, type: 'toggle', depends: 'assign_owner' },
-    { key: 'change_stage', label: 'Cambiar etapa Pipedrive', icon: BarChart3, type: 'select', options: [{ value: 'no', label: 'No' }, { value: 'optional', label: 'Opcional' }, { value: 'required', label: 'Obligatorio' }] },
-    { key: 'log_pipedrive', label: 'Registrar llamada en Pipedrive', icon: Phone, type: 'always' },
-    { key: 'mark_lost', label: 'Marcar como perdido', icon: XCircle, type: 'toggle' },
-    { key: 'require_lost_reason', label: 'Pedir motivo de pérdida', icon: FileText, type: 'toggle', depends: 'mark_lost' },
-    { key: 'create_followup', label: 'Crear tarea de seguimiento', icon: CalendarClock, type: 'toggle' },
-    { key: 'mark_done', label: 'Finalizar lead en campaña', icon: CheckCircle2, type: 'toggle' },
-    { key: 'allow_retry', label: 'Permitir reintento inmediato', icon: RotateCcw, type: 'toggle' },
-    { key: 'require_retry_time', label: 'Pedir tiempo de reintento', icon: Clock, type: 'toggle' },
-    { key: 'require_future_delay', label: 'Pedir plazo futuro', icon: CalendarClock, type: 'toggle' }
+    { key: 'assign_owner', label: 'Auto-asignar responsable', icon: User, type: 'toggle', tooltip: 'Al guardar, el lead se asigna automáticamente al ejecutivo que hizo la llamada en Pipedrive' },
+    { key: 'allow_change_owner', label: 'Permitir cambiar responsable', icon: User, type: 'toggle', depends: 'assign_owner', tooltip: 'Muestra un dropdown para que el ejecutivo elija otro responsable en vez de auto-asignarse' },
+    { key: 'change_stage', label: 'Cambiar etapa Pipedrive', icon: BarChart3, type: 'select', options: [{ value: 'no', label: 'No' }, { value: 'optional', label: 'Opcional' }, { value: 'required', label: 'Obligatorio' }], tooltip: 'Permite mover el negocio a otra etapa del pipeline. Opcional = el ejecutivo decide, Obligatorio = debe seleccionar etapa' },
+    { key: 'log_pipedrive', label: 'Registrar llamada en Pipedrive', icon: Phone, type: 'always', tooltip: 'Siempre se registra la actividad de llamada con notas y duración en Pipedrive' },
+    { key: 'mark_lost', label: 'Marcar como perdido', icon: XCircle, type: 'toggle', tooltip: 'Marca el negocio como perdido en Pipedrive. Útil para resultados negativos definitivos' },
+    { key: 'require_lost_reason', label: 'Pedir motivo de pérdida', icon: FileText, type: 'toggle', depends: 'mark_lost', tooltip: 'Obliga al ejecutivo a seleccionar un motivo de pérdida de Pipedrive antes de guardar' },
+    { key: 'create_followup', label: 'Crear tarea de seguimiento', icon: CalendarClock, type: 'toggle', tooltip: 'Crea una actividad de seguimiento en Pipedrive para llamar al lead después' },
+    { key: 'mark_done', label: 'Finalizar lead en campaña', icon: CheckCircle2, type: 'toggle', tooltip: 'Marca el lead como completado en la campaña. Si está apagado, el lead vuelve a la cola' },
+    { key: 'allow_retry', label: 'Permitir reintento inmediato', icon: RotateCcw, type: 'toggle', tooltip: 'Muestra botón para volver a llamar al lead inmediatamente sin registrar resultado' },
+    { key: 'require_retry_time', label: 'Pedir tiempo de reintento', icon: Clock, type: 'toggle', tooltip: 'Pide seleccionar en cuántas horas reintentar la llamada (1h, 2h, 3h, etc.)' },
+    { key: 'require_future_delay', label: 'Pedir plazo futuro', icon: CalendarClock, type: 'toggle', tooltip: 'Pide seleccionar en cuántos días el lead estará disponible (15, 30, 45+ días)' }
   ];
 
   const getCategoryEmoji = (cat) => {
@@ -1476,53 +1479,56 @@ export default function ReviewPage() {
           <div className="card outcomes-card">
             <div className="history-header">
               <h2><Zap style={{width:18,height:18,verticalAlign:'middle',marginRight:6}} />Resultados de llamada</h2>
-              {outcomesLoading && <Loader2 className="icon-sm spin" />}
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                {outcomesLoading && <Loader2 className="icon-sm spin" />}
+                {userRole === 'admin' && (
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    onClick={() => setShowOutcomeModal(true)}
+                    style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,padding:'8px 16px'}}
+                  >
+                    <Plus style={{width:14,height:14}} /> Agregar nuevo
+                  </button>
+                )}
+              </div>
             </div>
 
-            {userRole === 'admin' && (
-              <div className="outcome-create-bar">
-                <input
-                  type="text"
-                  placeholder="Nombre del nuevo resultado..."
-                  value={newOutcomeLabel}
-                  onChange={(event) => setNewOutcomeLabel(event.target.value)}
-                  className="outcome-create-input"
-                />
-                <div className="outcome-create-cats">
-                  {['positive', 'neutral', 'negative'].map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      className={`cat-chip cat-${cat} ${newOutcomeCategory === cat ? 'active' : ''}`}
-                      onClick={() => setNewOutcomeCategory(cat)}
-                    >
-                      {getCategoryEmoji(cat)} {getCategoryLabel(cat)}
-                    </button>
-                  ))}
-                </div>
-                <div className="outcome-create-selects">
-                  <select value={newOutcomeType} onChange={(event) => setNewOutcomeType(event.target.value)}>
-                    {OUTCOME_TYPES.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                  <select value={newOutcomeBucket} onChange={(event) => setNewOutcomeBucket(event.target.value)}>
-                    {OUTCOME_BUCKETS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <button className="btn btn-primary" type="button" onClick={createOutcome} disabled={!newOutcomeLabel.trim()}>
-                  <Plus style={{width:14,height:14}} /> Agregar
+            <div className="outcome-filter-bar">
+              {[
+                { value: 'all', label: 'Todos', emoji: '' },
+                { value: 'positive', label: 'Positivo', emoji: '🟢' },
+                { value: 'neutral', label: 'Neutro', emoji: '🟡' },
+                { value: 'negative', label: 'Negativo', emoji: '🔴' }
+              ].map((f) => (
+                <button
+                  key={f.value}
+                  type="button"
+                  className={`filter-chip ${outcomeCategoryFilter === f.value ? 'active' : ''} ${f.value !== 'all' ? 'filter-' + f.value : ''}`}
+                  onClick={() => setOutcomeCategoryFilter(f.value)}
+                >
+                  {f.emoji} {f.label}
+                  {f.value !== 'all' && (
+                    <span className="filter-count">
+                      {outcomes.filter(o => (o.category || 'negative') === f.value).length}
+                    </span>
+                  )}
+                  {f.value === 'all' && (
+                    <span className="filter-count">{outcomes.length}</span>
+                  )}
                 </button>
-              </div>
-            )}
+              ))}
+            </div>
 
             {outcomeError && <div className="auth-error" style={{marginTop:8}}>{outcomeError}</div>}
 
             <div className="zapier-cards">
-              {outcomes.length === 0 && <div className="empty">Sin resultados definidos</div>}
-              {outcomes.map((outcome) => {
+              {outcomes.filter(o => outcomeCategoryFilter === 'all' || (o.category || 'negative') === outcomeCategoryFilter).length === 0 && (
+                <div className="empty">Sin resultados {outcomeCategoryFilter !== 'all' ? `en categoría ${getCategoryLabel(outcomeCategoryFilter)}` : 'definidos'}</div>
+              )}
+              {outcomes
+                .filter(o => outcomeCategoryFilter === 'all' || (o.category || 'negative') === outcomeCategoryFilter)
+                .map((outcome) => {
                 const config = outcome.action_config || {};
                 const cat = outcome.category || 'negative';
                 return (
@@ -1540,7 +1546,7 @@ export default function ReviewPage() {
                               type="button"
                               className={`zapier-toggle ${outcome.activo !== false ? 'on' : 'off'}`}
                               onClick={() => updateOutcome(outcome.id, { ...outcome, activo: outcome.activo === false ? true : false })}
-                              title={outcome.activo !== false ? 'Activo' : 'Inactivo'}
+                              title={outcome.activo !== false ? 'Activo — click para desactivar' : 'Inactivo — click para activar'}
                             >
                               {outcome.activo !== false
                                 ? <ToggleRight style={{width:22,height:22}} />
@@ -1550,7 +1556,7 @@ export default function ReviewPage() {
                             <button
                               type="button"
                               className="icon-btn subtle-delete"
-                              onClick={() => deleteOutcome(outcome.id)}
+                              onClick={() => { if (confirm(`¿Eliminar "${outcome.label}"?`)) deleteOutcome(outcome.id); }}
                               title={`Eliminar ${outcome.label}`}
                             >
                               <Trash2 style={{width:14,height:14}} />
@@ -1574,7 +1580,12 @@ export default function ReviewPage() {
                               <div className="zapier-step-icon">
                                 <StepIcon style={{width:14,height:14}} />
                               </div>
-                              <div className="zapier-step-label">{step.label}</div>
+                              <div className="zapier-step-label">
+                                {step.label}
+                                <span className="zapier-tooltip-trigger" title={step.tooltip}>
+                                  <Info style={{width:12,height:12}} />
+                                </span>
+                              </div>
                               <div className="zapier-step-control">
                                 {step.type === 'always' && (
                                   <span className="zapier-always">Siempre</span>
@@ -1626,6 +1637,7 @@ export default function ReviewPage() {
                           value={outcome.outcome_type || 'final'}
                           onChange={(event) => updateOutcome(outcome.id, { ...outcome, outcome_type: event.target.value })}
                           className="zapier-meta-select"
+                          title="Tipo: Final = cierra gestión, Intermedio = puede reintentar"
                         >
                           {OUTCOME_TYPES.map((opt) => (
                             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -1635,6 +1647,7 @@ export default function ReviewPage() {
                           value={outcome.metric_bucket || 'otro'}
                           onChange={(event) => updateOutcome(outcome.id, { ...outcome, metric_bucket: event.target.value })}
                           className="zapier-meta-select"
+                          title="Bucket de métricas: determina cómo se agrupa en reportes"
                         >
                           {OUTCOME_BUCKETS.map((opt) => (
                             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -1647,6 +1660,86 @@ export default function ReviewPage() {
               })}
             </div>
           </div>
+
+          {/* Modal para crear nuevo resultado */}
+          {showOutcomeModal && (
+            <div className="outcome-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowOutcomeModal(false); }}>
+              <div className="outcome-modal">
+                <div className="outcome-modal-header">
+                  <h3><Plus style={{width:18,height:18}} /> Nuevo resultado de llamada</h3>
+                  <button type="button" className="outcome-modal-close" onClick={() => setShowOutcomeModal(false)}>
+                    <X style={{width:18,height:18}} />
+                  </button>
+                </div>
+
+                <div className="outcome-modal-body">
+                  <div className="outcome-modal-field">
+                    <label>Nombre del resultado</label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Interesado, No contesta, Información falsa..."
+                      value={newOutcomeLabel}
+                      onChange={(event) => setNewOutcomeLabel(event.target.value)}
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="outcome-modal-field">
+                    <label>Categoría <span className="tooltip-inline" title="Positivo = resultado favorable. Neutro = sin contacto o pendiente. Negativo = resultado desfavorable o pérdida."><Info style={{width:12,height:12}} /></span></label>
+                    <div className="outcome-modal-cats">
+                      {['positive', 'neutral', 'negative'].map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          className={`cat-chip cat-${cat} ${newOutcomeCategory === cat ? 'active' : ''}`}
+                          onClick={() => setNewOutcomeCategory(cat)}
+                        >
+                          {getCategoryEmoji(cat)} {getCategoryLabel(cat)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="outcome-modal-row">
+                    <div className="outcome-modal-field">
+                      <label>Tipo <span className="tooltip-inline" title="Final = cierra la gestión del lead. Intermedio = el lead puede volver a la cola para reintentar."><Info style={{width:12,height:12}} /></span></label>
+                      <select value={newOutcomeType} onChange={(event) => setNewOutcomeType(event.target.value)}>
+                        {OUTCOME_TYPES.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="outcome-modal-field">
+                      <label>Bucket de métricas <span className="tooltip-inline" title="Determina cómo se agrupa este resultado en los reportes y estadísticas de campaña."><Info style={{width:12,height:12}} /></span></label>
+                      <select value={newOutcomeBucket} onChange={(event) => setNewOutcomeBucket(event.target.value)}>
+                        {OUTCOME_BUCKETS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="outcome-modal-preview">
+                    <div className="outcome-modal-preview-title">Vista previa de acciones</div>
+                    <div className="outcome-modal-preview-desc">
+                      Al crearse, se asignarán las acciones predeterminadas para la categoría <strong>{getCategoryLabel(newOutcomeCategory)}</strong>. Podrás editarlas después.
+                    </div>
+                  </div>
+
+                  {outcomeError && <div className="auth-error">{outcomeError}</div>}
+                </div>
+
+                <div className="outcome-modal-footer">
+                  <button className="btn btn-secondary" type="button" onClick={() => setShowOutcomeModal(false)}>
+                    Cancelar
+                  </button>
+                  <button className="btn btn-primary" type="button" onClick={createOutcome} disabled={!newOutcomeLabel.trim()}>
+                    <Plus style={{width:14,height:14}} /> Crear resultado
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -2583,34 +2676,15 @@ export default function ReviewPage() {
           align-items: center;
         }
 
-        /* Create bar */
-        .outcome-create-bar {
-          margin-top: 16px;
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-          align-items: center;
-          padding: 14px;
-          background: var(--surface-alt);
-          border-radius: 14px;
-          border: 1px dashed var(--border);
-        }
-        .outcome-create-input {
-          flex: 1;
-          min-width: 180px;
-          border-radius: 10px;
-          border: 1px solid var(--border);
-          background: var(--surface);
-          color: var(--text-primary);
-          padding: 10px 12px;
-          font-size: 13px;
-        }
-        .outcome-create-cats {
+        /* Filter bar */
+        .outcome-filter-bar {
           display: flex;
           gap: 6px;
+          margin-top: 14px;
+          flex-wrap: wrap;
         }
-        .cat-chip {
-          padding: 6px 12px;
+        .filter-chip {
+          padding: 6px 14px;
           border-radius: 20px;
           border: 1.5px solid var(--border);
           background: transparent;
@@ -2619,21 +2693,189 @@ export default function ReviewPage() {
           font-weight: 600;
           transition: all 0.15s;
           color: var(--text-secondary);
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .filter-chip.active {
+          border-color: var(--primary, #6366f1);
+          background: rgba(99,102,241,0.1);
+          color: var(--primary, #6366f1);
+        }
+        .filter-chip.active.filter-positive { border-color: #22c55e; background: rgba(34,197,94,0.1); color: #22c55e; }
+        .filter-chip.active.filter-neutral { border-color: #f59e0b; background: rgba(245,158,11,0.1); color: #f59e0b; }
+        .filter-chip.active.filter-negative { border-color: #ef4444; background: rgba(239,68,68,0.1); color: #ef4444; }
+        .filter-count {
+          font-size: 10px;
+          font-weight: 700;
+          background: rgba(128,128,128,0.15);
+          padding: 1px 7px;
+          border-radius: 10px;
+        }
+        .filter-chip.active .filter-count {
+          background: rgba(255,255,255,0.2);
+        }
+
+        /* Category chips for modal */
+        .cat-chip {
+          padding: 8px 16px;
+          border-radius: 20px;
+          border: 1.5px solid var(--border);
+          background: transparent;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 600;
+          transition: all 0.15s;
+          color: var(--text-secondary);
         }
         .cat-chip.active.cat-positive { border-color: #22c55e; background: rgba(34,197,94,0.12); color: #22c55e; }
         .cat-chip.active.cat-neutral { border-color: #f59e0b; background: rgba(245,158,11,0.12); color: #f59e0b; }
         .cat-chip.active.cat-negative { border-color: #ef4444; background: rgba(239,68,68,0.12); color: #ef4444; }
-        .outcome-create-selects {
-          display: flex;
-          gap: 6px;
+
+        /* Tooltips */
+        .zapier-tooltip-trigger {
+          display: inline-flex;
+          align-items: center;
+          margin-left: 4px;
+          color: var(--text-muted);
+          cursor: help;
+          opacity: 0.5;
+          transition: opacity 0.15s;
+          vertical-align: middle;
         }
-        .outcome-create-selects select {
-          border-radius: 10px;
-          border: 1px solid var(--border);
-          background: var(--surface);
+        .zapier-tooltip-trigger:hover {
+          opacity: 1;
+          color: var(--primary, #6366f1);
+        }
+        .tooltip-inline {
+          display: inline-flex;
+          align-items: center;
+          margin-left: 4px;
+          color: var(--text-muted);
+          cursor: help;
+          opacity: 0.5;
+          vertical-align: middle;
+        }
+        .tooltip-inline:hover {
+          opacity: 1;
+          color: var(--primary, #6366f1);
+        }
+
+        /* Modal overlay */
+        .outcome-modal-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          background: rgba(0,0,0,0.45);
+        }
+        .outcome-modal {
+          background: var(--surface, #fff);
+          border-radius: 20px;
+          width: 90%;
+          max-width: 500px;
+          box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+          overflow: hidden;
+        }
+        .outcome-modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 20px 24px 16px;
+          border-bottom: 1px solid var(--border);
+        }
+        .outcome-modal-header h3 {
+          margin: 0;
+          font-size: 16px;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          gap: 8px;
           color: var(--text-primary);
-          padding: 8px 10px;
+        }
+        .outcome-modal-close {
+          background: none;
+          border: none;
+          color: var(--text-muted);
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 8px;
+          transition: background 0.15s;
+        }
+        .outcome-modal-close:hover {
+          background: var(--surface-alt);
+        }
+        .outcome-modal-body {
+          padding: 20px 24px;
+          display: flex;
+          flex-direction: column;
+          gap: 18px;
+        }
+        .outcome-modal-field label {
+          display: block;
           font-size: 12px;
+          font-weight: 600;
+          color: var(--text-secondary);
+          margin-bottom: 6px;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+        }
+        .outcome-modal-field input,
+        .outcome-modal-field select {
+          width: 100%;
+          border-radius: 12px;
+          border: 1px solid var(--border);
+          background: var(--surface-alt);
+          color: var(--text-primary);
+          padding: 10px 14px;
+          font-size: 14px;
+          font-family: inherit;
+        }
+        .outcome-modal-field input:focus,
+        .outcome-modal-field select:focus {
+          outline: none;
+          border-color: var(--primary, #6366f1);
+          box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+        }
+        .outcome-modal-cats {
+          display: flex;
+          gap: 8px;
+        }
+        .outcome-modal-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+        .outcome-modal-preview {
+          padding: 12px 14px;
+          background: var(--surface-alt);
+          border-radius: 12px;
+          border: 1px dashed var(--border);
+        }
+        .outcome-modal-preview-title {
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+          color: var(--text-muted);
+          margin-bottom: 4px;
+        }
+        .outcome-modal-preview-desc {
+          font-size: 12px;
+          color: var(--text-secondary);
+          line-height: 1.5;
+        }
+        .outcome-modal-footer {
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          padding: 16px 24px;
+          border-top: 1px solid var(--border);
+          background: var(--surface-alt);
         }
 
         /* Zapier cards grid */
