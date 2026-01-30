@@ -11,6 +11,7 @@ export default function LoginPage() {
   const { session, isSessionReady, loginWithGoogle } = useSession();
   const [authError, setAuthError] = useState('');
   const [googleReady, setGoogleReady] = useState(false);
+  const [sessionTimeout, setSessionTimeout] = useState(false);
   const googleBtnRef = useRef(null);
   const googleInitRef = useRef(false);
 
@@ -49,6 +50,13 @@ export default function LoginPage() {
       router.replace('/dialer');
     }
   }, [isSessionReady, session, router]);
+
+  // Fallback: si la sesión no carga en 3s, mostrar el botón de Google igual
+  useEffect(() => {
+    if (isSessionReady) return;
+    const timer = setTimeout(() => setSessionTimeout(true), 3000);
+    return () => clearTimeout(timer);
+  }, [isSessionReady]);
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) {
@@ -101,6 +109,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!googleReady) return;
+    if (!(isSessionReady || sessionTimeout)) return;
     if (!googleBtnRef.current) return;
     if (!window.google || googleInitRef.current) return;
 
@@ -117,7 +126,7 @@ export default function LoginPage() {
     });
 
     googleInitRef.current = true;
-  }, [googleReady]);
+  }, [googleReady, isSessionReady, sessionTimeout]);
 
   return (
     <>
@@ -140,7 +149,7 @@ export default function LoginPage() {
             <p className="subtitle">Accede con Google Houm y comienza a marcar.</p>
 
             <div className="login-google">
-              {isSessionReady ? (
+              {(isSessionReady || sessionTimeout) ? (
                 <div ref={googleBtnRef} className="google-btn" />
               ) : (
                 <div className="login-loading">
