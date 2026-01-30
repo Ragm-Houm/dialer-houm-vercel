@@ -1582,8 +1582,9 @@ export default function ReviewPage() {
                               </div>
                               <div className="zapier-step-label">
                                 {step.label}
-                                <span className="zapier-tooltip-trigger" title={step.tooltip}>
+                                <span className="zapier-tooltip-trigger">
                                   <Info style={{width:12,height:12}} />
+                                  <span className="zapier-tooltip-popup">{step.tooltip}</span>
                                 </span>
                               </div>
                               <div className="zapier-step-control">
@@ -1685,7 +1686,7 @@ export default function ReviewPage() {
                   </div>
 
                   <div className="outcome-modal-field">
-                    <label>Categoría <span className="tooltip-inline" title="Positivo = resultado favorable. Neutro = sin contacto o pendiente. Negativo = resultado desfavorable o pérdida."><Info style={{width:12,height:12}} /></span></label>
+                    <label>Categoría <span className="zapier-tooltip-trigger"><Info style={{width:12,height:12}} /><span className="zapier-tooltip-popup">Positivo = resultado favorable. Neutro = sin contacto o pendiente. Negativo = resultado desfavorable o pérdida.</span></span></label>
                     <div className="outcome-modal-cats">
                       {['positive', 'neutral', 'negative'].map((cat) => (
                         <button
@@ -1702,7 +1703,7 @@ export default function ReviewPage() {
 
                   <div className="outcome-modal-row">
                     <div className="outcome-modal-field">
-                      <label>Tipo <span className="tooltip-inline" title="Final = cierra la gestión del lead. Intermedio = el lead puede volver a la cola para reintentar."><Info style={{width:12,height:12}} /></span></label>
+                      <label>Tipo <span className="zapier-tooltip-trigger"><Info style={{width:12,height:12}} /><span className="zapier-tooltip-popup">Final = cierra la gestión del lead. Intermedio = el lead puede volver a la cola para reintentar.</span></span></label>
                       <select value={newOutcomeType} onChange={(event) => setNewOutcomeType(event.target.value)}>
                         {OUTCOME_TYPES.map((opt) => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -1710,7 +1711,7 @@ export default function ReviewPage() {
                       </select>
                     </div>
                     <div className="outcome-modal-field">
-                      <label>Bucket de métricas <span className="tooltip-inline" title="Determina cómo se agrupa este resultado en los reportes y estadísticas de campaña."><Info style={{width:12,height:12}} /></span></label>
+                      <label>Bucket de métricas <span className="zapier-tooltip-trigger"><Info style={{width:12,height:12}} /><span className="zapier-tooltip-popup">Determina cómo se agrupa este resultado en los reportes y estadísticas de campaña.</span></span></label>
                       <select value={newOutcomeBucket} onChange={(event) => setNewOutcomeBucket(event.target.value)}>
                         {OUTCOME_BUCKETS.map((opt) => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -2734,6 +2735,7 @@ export default function ReviewPage() {
 
         /* Tooltips */
         .zapier-tooltip-trigger {
+          position: relative;
           display: inline-flex;
           align-items: center;
           margin-left: 4px;
@@ -2747,7 +2749,50 @@ export default function ReviewPage() {
           opacity: 1;
           color: var(--primary, #6366f1);
         }
+        .zapier-tooltip-popup {
+          display: none;
+          position: absolute;
+          bottom: calc(100% + 8px);
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(15, 18, 30, 0.95);
+          color: #e2e8f0;
+          font-size: 12px;
+          font-weight: 400;
+          line-height: 1.5;
+          padding: 8px 12px;
+          border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.1);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+          white-space: normal;
+          width: 240px;
+          z-index: 9999;
+          pointer-events: none;
+          text-align: left;
+        }
+        :global(body[data-theme='light']) .zapier-tooltip-popup {
+          background: rgba(255, 255, 255, 0.97);
+          color: #1e293b;
+          border: 1px solid rgba(0,0,0,0.1);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+        .zapier-tooltip-popup::after {
+          content: '';
+          position: absolute;
+          top: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          border: 6px solid transparent;
+          border-top-color: rgba(15, 18, 30, 0.95);
+        }
+        :global(body[data-theme='light']) .zapier-tooltip-popup::after {
+          border-top-color: rgba(255, 255, 255, 0.97);
+        }
+        .zapier-tooltip-trigger:hover .zapier-tooltip-popup {
+          display: block;
+        }
         .tooltip-inline {
+          position: relative;
           display: inline-flex;
           align-items: center;
           margin-left: 4px;
