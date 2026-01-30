@@ -99,6 +99,7 @@ export default function Home() {
   const autoCallCancelCountRef = useRef(0);
   const [isMuted, setIsMuted] = useState(false);
   const [actionToast, setActionToast] = useState('');
+  const [showSessionExpired, setShowSessionExpired] = useState(false);
   const [campaigns, setCampaigns] = useState([]);
   const [campaignsLoading, setCampaignsLoading] = useState(false);
   const [selectedCampaignKey, setSelectedCampaignKey] = useState('');
@@ -696,6 +697,11 @@ export default function Home() {
 
       device.on('error', (error) => {
         console.error('❌ Error Twilio:', error);
+        const code = error?.code || error?.twilioError?.code;
+        if (code === 31009 || (error?.message || '').includes('No transport available')) {
+          setShowSessionExpired(true);
+          return;
+        }
         updateStatus('error', 'Error');
         alert('Error Twilio: ' + (error.message || 'Unknown error'));
       });
@@ -4742,7 +4748,89 @@ export default function Home() {
           cursor: not-allowed;
           transform: none;
         }
+        .session-expired-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          background: rgba(0,0,0,0.5);
+        }
+        .session-expired-card {
+          background: var(--surface, #fff);
+          border-radius: 20px;
+          padding: 40px 36px;
+          text-align: center;
+          max-width: 380px;
+          width: 90%;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        .session-expired-icon {
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
+          background: rgba(239,68,68,0.12);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 20px;
+          color: #ef4444;
+        }
+        .session-expired-card h2 {
+          margin: 0 0 8px;
+          font-size: 18px;
+          font-weight: 700;
+          color: var(--text-primary, #111);
+        }
+        .session-expired-card p {
+          margin: 0 0 24px;
+          font-size: 13px;
+          color: var(--text-secondary, #666);
+          line-height: 1.5;
+        }
+        .session-expired-card .btn-back {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 28px;
+          border-radius: 14px;
+          border: none;
+          background: var(--primary, #6366f1);
+          color: #fff;
+          font-weight: 600;
+          font-size: 14px;
+          cursor: pointer;
+          transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .session-expired-card .btn-back:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+        }
       `}</style>
+
+      {showSessionExpired && (
+        <div className="session-expired-overlay">
+          <div className="session-expired-card">
+            <div className="session-expired-icon">
+              <PhoneOff style={{width:28,height:28}} />
+            </div>
+            <h2>Sesión expirada</h2>
+            <p>La conexión con el servidor de llamadas se perdió por inactividad. Vuelve a iniciar sesión para continuar.</p>
+            <button
+              className="btn-back"
+              onClick={() => {
+                setShowSessionExpired(false);
+                window.location.href = '/login';
+              }}
+            >
+              <LogOut style={{width:16,height:16}} /> Volver al login
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="container">
         <div className="background-orb orb-1" />
