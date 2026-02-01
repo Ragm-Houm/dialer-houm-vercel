@@ -1404,39 +1404,58 @@ export default function ReviewPage() {
             </div>
             {campaigns.length === 0 && <div className="empty">Sin campañas registradas</div>}
             <div className="history-list">
-              {campaigns.map((campaign) => (
-                <button
-                  key={campaign.campaign_key}
-                  type="button"
-                  className="history-item"
-                  onClick={() => openDetail(campaign.campaign_key)}
-                >
-                  <div>
-                    <div className="history-title">{campaign.name}</div>
-                    <div className="history-sub">
+              {campaigns.map((campaign) => {
+                const cTotal = (campaign.handled || 0) + (campaign.pending || 0);
+                const cPct = cTotal > 0 ? Math.round(((campaign.handled || 0) / cTotal) * 100) : 0;
+                const eff = campaign.effective_status || campaign.status;
+                const statusLabel = { active: 'Activa', inactive: 'Inactiva', terminated: 'Terminada' }[eff] || eff;
+                const statusColor = { active: '#22c55e', inactive: '#f59e0b', terminated: '#ef4444' }[eff] || '#94a3b8';
+                return (
+                  <button
+                    key={campaign.campaign_key}
+                    type="button"
+                    className="campaign-card"
+                    onClick={() => openDetail(campaign.campaign_key)}
+                  >
+                    <div className="campaign-card-header">
+                      <span className={`status-dot ${eff}`}>
+                        <span className={`status-dot-inner ${eff}`} />
+                      </span>
+                      <span className="campaign-card-name">{campaign.name}</span>
+                      <span className="campaign-card-badge" style={{ background: `${statusColor}18`, color: statusColor, border: `1px solid ${statusColor}33` }}>
+                        {statusLabel}
+                      </span>
+                      <ChevronRight style={{ width: 18, height: 18, color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }} />
+                    </div>
+                    <div className="campaign-card-meta">
                       {campaign.country} · {campaign.stage_name || `Etapa ${campaign.stage_id}`}
+                      {campaign.effective_status === 'active' && (
+                        <> · {campaign.no_time_limit ? 'Sin límite' : `Cierre: ${formatCountdown(campaign.close_at) || 'calculando'}`}</>
+                      )}
                     </div>
-                    <div className="history-metric">
-                      {campaign.handled || 0} gestionados · {campaign.pending || 0} sin gestionar
+                    <div className="campaign-card-kpis">
+                      <div className="campaign-card-kpi">
+                        <div className="campaign-card-kpi-val">{cTotal}</div>
+                        <div className="campaign-card-kpi-lbl">Total</div>
+                      </div>
+                      <div className="campaign-card-kpi kpi-g">
+                        <div className="campaign-card-kpi-val">{campaign.handled || 0}</div>
+                        <div className="campaign-card-kpi-lbl">Contactados</div>
+                      </div>
+                      <div className="campaign-card-kpi kpi-y">
+                        <div className="campaign-card-kpi-val">{campaign.pending || 0}</div>
+                        <div className="campaign-card-kpi-lbl">Pendientes</div>
+                      </div>
                     </div>
-                    <div className="history-timer">
-                      {campaign.effective_status === 'active'
-                        ? campaign.no_time_limit
-                          ? 'Sin limite'
-                          : `Cierre estimado: ${formatCountdown(campaign.close_at) || 'calculando'}`
-                        : campaign.effective_status === 'terminated'
-                          ? 'Campaña terminada'
-                          : 'Campaña inactiva'}
+                    <div className="campaign-card-progress">
+                      <div className="campaign-card-bar">
+                        <div className="campaign-card-fill" style={{ width: `${cPct}%` }} />
+                      </div>
+                      <span className="campaign-card-pct">{cPct}%</span>
                     </div>
-                  </div>
-                  <div className="history-meta">
-                    <span className={`status-dot ${campaign.effective_status || campaign.status}`}>
-                      <span className={`status-dot-inner ${campaign.effective_status || campaign.status}`} />
-                    </span>
-                    <ChevronRight className="icon-sm" />
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -3311,6 +3330,125 @@ export default function ReviewPage() {
           font-size: 12px;
           color: var(--text-soft);
         }
+
+        /* ── Campaign cards redesign ── */
+        .campaign-card {
+          width: 100%;
+          border: 1px solid var(--border);
+          background: var(--surface-alt);
+          border-radius: 16px;
+          padding: 16px 18px;
+          cursor: pointer;
+          text-align: left;
+          transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .campaign-card:hover {
+          border-color: var(--accent);
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+        }
+        .campaign-card-header {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .campaign-card-name {
+          font-size: 15px;
+          font-weight: 700;
+          color: var(--text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          flex: 1;
+          min-width: 0;
+        }
+        .campaign-card-badge {
+          display: inline-flex;
+          align-items: center;
+          font-size: 10px;
+          font-weight: 700;
+          padding: 2px 9px;
+          border-radius: 20px;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .campaign-card-meta {
+          font-size: 12px;
+          color: var(--text-muted);
+          margin-top: 4px;
+          padding-left: 28px;
+        }
+        .campaign-card-kpis {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+          margin-top: 14px;
+        }
+        .campaign-card-kpi {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 8px 10px;
+          text-align: center;
+        }
+        .campaign-card-kpi.kpi-g {
+          border-color: rgba(34,197,94,0.25);
+          background: rgba(34,197,94,0.05);
+        }
+        .campaign-card-kpi.kpi-y {
+          border-color: rgba(245,158,11,0.25);
+          background: rgba(245,158,11,0.05);
+        }
+        .campaign-card-kpi-val {
+          font-size: 20px;
+          font-weight: 800;
+          color: var(--text-primary);
+          line-height: 1.1;
+        }
+        .campaign-card-kpi.kpi-g .campaign-card-kpi-val { color: #22c55e; }
+        .campaign-card-kpi.kpi-y .campaign-card-kpi-val { color: #f59e0b; }
+        .campaign-card-kpi-lbl {
+          font-size: 10px;
+          font-weight: 600;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.2px;
+          margin-top: 2px;
+        }
+        .campaign-card-progress {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-top: 10px;
+        }
+        .campaign-card-bar {
+          flex: 1;
+          height: 6px;
+          background: var(--surface);
+          border-radius: 99px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+        }
+        .campaign-card-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #22c55e, #16a34a);
+          border-radius: 99px;
+          transition: width 0.5s ease;
+        }
+        .campaign-card-pct {
+          font-size: 12px;
+          font-weight: 700;
+          color: #22c55e;
+          min-width: 32px;
+          text-align: right;
+        }
+        @media (max-width: 480px) {
+          .campaign-card-kpis { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+          .campaign-card-kpi-val { font-size: 16px; }
+        }
+
         .active-campaign-card {
           border: 1px solid var(--border-strong);
           background: var(--surface-strong);
