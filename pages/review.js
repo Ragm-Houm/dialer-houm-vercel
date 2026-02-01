@@ -3469,7 +3469,7 @@ export default function ReviewPage() {
           display: flex;
           align-items: flex-start;
           justify-content: center;
-          padding: 40px 24px;
+          padding: 48px 24px 24px;
           overflow-y: auto;
         }
 
@@ -3479,12 +3479,12 @@ export default function ReviewPage() {
           border-radius: 20px;
           border: 1px solid var(--border-subtle);
           width: min(780px, 95vw);
-          max-height: min(88vh, 940px);
+          max-height: calc(100vh - 96px);
           display: flex;
           flex-direction: column;
           overflow: hidden;
           box-shadow: 0 20px 60px rgba(0,0,0,0.25);
-          margin: auto;
+          flex-shrink: 0;
         }
         .detail-header {
           display: flex;
