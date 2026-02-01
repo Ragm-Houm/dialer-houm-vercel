@@ -31,8 +31,8 @@ export default async function handler(req, res) {
     // Establecer la cookie
     setCsrfCookie(res, token);
 
-    // Responder con éxito
-    res.status(200).json({ ok: true });
+    // Responder con éxito y el token (fallback si cookie no se lee bien)
+    res.status(200).json({ ok: true, token });
   } catch (error) {
     console.error('Error generando CSRF token:', error);
     res.status(500).json({ error: 'Error interno' });

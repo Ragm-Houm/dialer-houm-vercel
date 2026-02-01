@@ -2815,6 +2815,12 @@ export default function ReviewPage() {
           max-width: 500px;
           box-shadow: 0 12px 40px rgba(0,0,0,0.25);
           overflow: visible;
+          box-sizing: border-box;
+        }
+        .outcome-modal *,
+        .outcome-modal *::before,
+        .outcome-modal *::after {
+          box-sizing: border-box;
         }
         .outcome-modal-header {
           display: flex;
@@ -2851,6 +2857,7 @@ export default function ReviewPage() {
           display: flex;
           flex-direction: column;
           gap: 18px;
+          overflow-x: hidden;
         }
         .outcome-modal-field label {
           display: block;
@@ -2864,6 +2871,7 @@ export default function ReviewPage() {
         .outcome-modal-field input,
         .outcome-modal-field select {
           width: 100%;
+          box-sizing: border-box;
           border-radius: 12px;
           border: 1px solid var(--border);
           background: var(--surface-alt);
