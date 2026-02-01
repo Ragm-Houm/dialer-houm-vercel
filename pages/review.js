@@ -3471,6 +3471,7 @@ export default function ReviewPage() {
           justify-content: center;
           padding: 48px 24px 24px;
           overflow-y: auto;
+          z-index: 50;
         }
 
         /* ── Detail modal redesign ── */
