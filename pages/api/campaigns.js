@@ -16,24 +16,19 @@ export default async function handler(req, res) {
     }
 
     try {
-      const { country, status } = req.query;
+      const { country, status, view } = req.query;
 
       const auth = await requireUser(req);
       if (!auth.ok) {
         return res.status(auth.status).json({ error: auth.error });
       }
-      let rows = await listCampaigns({ country, status });
 
-      // Filtrar campañas expiradas (close_at en el pasado y no sin límite de tiempo)
-      if (status === 'active') {
-        const now = new Date();
-        rows = rows.filter((row) => {
-          if (row.no_time_limit) return true;
-          if (!row.close_at) return true;
-          return new Date(row.close_at) > now;
-        });
-      }
+      // Para el dialer solo traer activas de BD; para review traer todas
+      const dbStatus = view === 'dialer' ? 'active'
+        : (status === 'inactive' ? 'inactive' : undefined);
+      const rows = await listCampaigns({ country, status: dbStatus });
 
+      // Enriquecer con conteos de leads
       const keys = rows.map((row) => row.campaign_key);
       const deals = keys.length > 0 ? await listCampaignDealsByKeys(keys) : [];
       const countsByKey = deals.reduce((acc, deal) => {
@@ -45,15 +40,34 @@ export default async function handler(req, res) {
         else acc[deal.campaign_key].pending += 1;
         return acc;
       }, {});
+
+      // Calcular effective_status para cada campaña:
+      // - active: status='active' en BD, no expirada Y con leads pendientes
+      // - terminated: status='active' en BD pero expirada O sin leads pendientes
+      // - inactive: status='inactive' en BD (desactivada manualmente)
+      const now = new Date();
       const enriched = rows.map((row) => {
         const counts = countsByKey[row.campaign_key] || { total: 0, handled: 0, pending: 0 };
-        return { ...row, ...counts };
+        let effectiveStatus = row.status;
+        if (row.status === 'active') {
+          const isExpired = !row.no_time_limit && row.close_at && new Date(row.close_at) <= now;
+          if (isExpired || counts.pending === 0) {
+            effectiveStatus = 'terminated';
+          }
+        }
+        return { ...row, ...counts, effective_status: effectiveStatus };
       });
 
-      // Si se piden activas, solo mostrar las que tienen leads pendientes
-      const result = status === 'active'
-        ? enriched.filter((c) => c.pending > 0)
-        : enriched;
+      // Filtrar según lo solicitado
+      let result = enriched;
+      if (view === 'dialer' || status === 'active') {
+        result = enriched.filter((c) => c.effective_status === 'active');
+      } else if (status === 'inactive') {
+        result = enriched.filter((c) => c.effective_status === 'inactive');
+      } else if (status === 'terminated') {
+        result = enriched.filter((c) => c.effective_status === 'terminated');
+      }
+      // status='all' o sin status → devolver todo
 
       return res.status(200).json({ campaigns: result });
     } catch (error) {

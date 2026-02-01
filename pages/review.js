@@ -324,14 +324,12 @@ export default function ReviewPage() {
     { value: 'intermediate', label: 'Intermedio' }
   ];
   const OUTCOME_BUCKETS = [
-    { value: 'interesado', label: 'Interesado' },
-    { value: 'agendado', label: 'Fotos agendadas' },
-    { value: 'perdido', label: 'Perdido' },
-    { value: 'no_contesta', label: 'No contesta' },
-    { value: 'falso', label: 'Información falsa' },
-    { value: 'futuro', label: 'Disponibilidad futura' },
-    { value: 'contactado', label: 'Contactado' },
-    { value: 'otro', label: 'Otro' }
+    { value: 'contacto_efectivo', label: '🟢 Contacto efectivo', description: 'Se logró contacto positivo con el lead' },
+    { value: 'conversion', label: '🏆 Conversión', description: 'Se logró cierre, agenda o avance concreto' },
+    { value: 'no_contacto', label: '📵 Sin contacto', description: 'No se logró hablar con el lead' },
+    { value: 'seguimiento', label: '🔄 Seguimiento', description: 'Requiere recontacto o espera futura' },
+    { value: 'descarte', label: '🚫 Descarte', description: 'Lead descartado definitivamente' },
+    { value: 'otro', label: '📋 Otro', description: 'No clasificado en las categorías anteriores' }
   ];
   const router = useRouter();
   const { session, isSessionReady, sessionError, clearSession, csrfFetch } = useSession();
@@ -807,36 +805,7 @@ export default function ReviewPage() {
         setCampaigns([]);
         return;
       }
-      const active = data.campaigns || [];
-      const now = Date.now();
-      const expired = active.filter(
-        (campaign) =>
-          campaign.status === 'active' &&
-          !campaign.no_time_limit &&
-          campaign.close_at &&
-          new Date(campaign.close_at).getTime() <= now
-      );
-      if (expired.length > 0) {
-        await Promise.all(
-          expired.map((campaign) =>
-            csrfFetch('/api/campaigns', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                campaignKey: campaign.campaign_key,
-                status: 'inactive',
-                email
-              })
-            })
-          )
-        );
-      }
-      const updated = active.map((campaign) =>
-        expired.find((item) => item.campaign_key === campaign.campaign_key)
-          ? { ...campaign, status: 'inactive' }
-          : campaign
-      );
-      setCampaigns(updated);
+      setCampaigns(data.campaigns || []);
     } catch (error) {
       console.error('Error cargando campañas:', error);
       setCampaigns([]);
@@ -1451,16 +1420,18 @@ export default function ReviewPage() {
                       {campaign.handled || 0} gestionados · {campaign.pending || 0} sin gestionar
                     </div>
                     <div className="history-timer">
-                      {campaign.status === 'active'
+                      {campaign.effective_status === 'active'
                         ? campaign.no_time_limit
                           ? 'Sin limite'
                           : `Cierre estimado: ${formatCountdown(campaign.close_at) || 'calculando'}`
-                        : 'Campaña inactiva'}
+                        : campaign.effective_status === 'terminated'
+                          ? 'Campaña terminada'
+                          : 'Campaña inactiva'}
                     </div>
                   </div>
                   <div className="history-meta">
-                    <span className={`status-dot ${campaign.status}`}>
-                      <span className={`status-dot-inner ${campaign.status}`} />
+                    <span className={`status-dot ${campaign.effective_status || campaign.status}`}>
+                      <span className={`status-dot-inner ${campaign.effective_status || campaign.status}`} />
                     </span>
                     <ChevronRight className="icon-sm" />
                   </div>
@@ -1648,7 +1619,7 @@ export default function ReviewPage() {
                           value={outcome.metric_bucket || 'otro'}
                           onChange={(event) => updateOutcome(outcome.id, { ...outcome, metric_bucket: event.target.value })}
                           className="zapier-meta-select"
-                          title="Bucket de métricas: determina cómo se agrupa en reportes"
+                          title="Clasificación métrica: determina cómo se agrupa en reportes"
                         >
                           {OUTCOME_BUCKETS.map((opt) => (
                             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -1693,7 +1664,11 @@ export default function ReviewPage() {
                           key={cat}
                           type="button"
                           className={`cat-chip cat-${cat} ${newOutcomeCategory === cat ? 'active' : ''}`}
-                          onClick={() => setNewOutcomeCategory(cat)}
+                          onClick={() => {
+                            setNewOutcomeCategory(cat);
+                            const defaultBucket = cat === 'positive' ? 'contacto_efectivo' : cat === 'neutral' ? 'no_contacto' : 'descarte';
+                            setNewOutcomeBucket(defaultBucket);
+                          }}
                         >
                           {getCategoryEmoji(cat)} {getCategoryLabel(cat)}
                         </button>
@@ -1711,7 +1686,7 @@ export default function ReviewPage() {
                       </select>
                     </div>
                     <div className="outcome-modal-field">
-                      <label>Bucket de métricas <span className="zapier-tooltip-trigger"><Info style={{width:12,height:12}} /><span className="zapier-tooltip-popup">Determina cómo se agrupa este resultado en los reportes y estadísticas de campaña.</span></span></label>
+                      <label>Clasificación métrica <span className="zapier-tooltip-trigger"><Info style={{width:12,height:12}} /><span className="zapier-tooltip-popup">Agrupa este resultado en reportes: Contacto efectivo (se habló), Conversión (agenda/cierre), Sin contacto (no contestó), Seguimiento (futuro), Descarte (perdido).</span></span></label>
                       <select value={newOutcomeBucket} onChange={(event) => setNewOutcomeBucket(event.target.value)}>
                         {OUTCOME_BUCKETS.map((opt) => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -1783,14 +1758,29 @@ export default function ReviewPage() {
                 </div>
               ))}
             </div>
-            {detail.totals?.buckets && (
+            {detail.totals?.buckets && Object.keys(detail.totals.buckets).length > 0 && (
               <div className="outcomes" style={{ marginTop: '12px' }}>
-                {Object.entries(detail.totals.buckets).map(([bucket, value]) => (
-                  <div key={bucket} className="outcome">
-                    <span>{bucket.replace(/_/g, ' ')}</span>
-                    <strong>{value}</strong>
-                  </div>
-                ))}
+                {(() => {
+                  const b = detail.totals.buckets;
+                  const groups = [
+                    { label: '🟢 Contacto efectivo', keys: ['contacto_efectivo', 'interesado', 'contactado'] },
+                    { label: '🏆 Conversión', keys: ['conversion', 'agendado', 'publicada', 'reservada', 'arrendada'] },
+                    { label: '📵 Sin contacto', keys: ['no_contacto', 'no_contesta'] },
+                    { label: '🔄 Seguimiento', keys: ['seguimiento', 'futuro'] },
+                    { label: '🚫 Descarte', keys: ['descarte', 'perdido', 'falso', 'caro'] },
+                    { label: '📋 Otro', keys: ['otro'] }
+                  ];
+                  return groups.map(g => {
+                    const total = g.keys.reduce((s, k) => s + (b[k] || 0), 0);
+                    if (total === 0) return null;
+                    return (
+                      <div key={g.label} className="outcome">
+                        <span>{g.label}</span>
+                        <strong>{total}</strong>
+                      </div>
+                    );
+                  }).filter(Boolean);
+                })()}
               </div>
             )}
             <div className="executives">
@@ -2824,7 +2814,7 @@ export default function ReviewPage() {
           width: 90%;
           max-width: 500px;
           box-shadow: 0 12px 40px rgba(0,0,0,0.25);
-          overflow: hidden;
+          overflow: visible;
         }
         .outcome-modal-header {
           display: flex;
@@ -2832,6 +2822,8 @@ export default function ReviewPage() {
           justify-content: space-between;
           padding: 20px 24px 16px;
           border-bottom: 1px solid var(--border);
+          border-radius: 20px 20px 0 0;
+          background: var(--surface, #fff);
         }
         .outcome-modal-header h3 {
           margin: 0;
@@ -2934,7 +2926,7 @@ export default function ReviewPage() {
           border: 1px solid var(--border);
           border-radius: 16px;
           background: var(--surface);
-          overflow: hidden;
+          overflow: visible;
           transition: box-shadow 0.15s;
         }
         .zapier-card:hover {

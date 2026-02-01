@@ -54,9 +54,15 @@ export default function MetricsPage() {
     return bucketMap[key] || 0;
   };
 
+  // Sumar bucket nuevo + legacy para compatibilidad con datos existentes
+  const getBucketGroup = (bucketMap, ...keys) => {
+    if (!bucketMap) return 0;
+    return keys.reduce((sum, k) => sum + (bucketMap[k] || 0), 0);
+  };
+
   const computeContactRate = (user) => {
-    const contacted =
-      getBucketValue(user.buckets, 'interesado') + getBucketValue(user.buckets, 'agendado');
+    const contacted = getBucketGroup(user.buckets,
+      'contacto_efectivo', 'conversion', 'interesado', 'agendado', 'publicada', 'reservada', 'arrendada');
     const total = user.calls || 0;
     if (!total) return 0;
     return contacted / total;
@@ -720,16 +726,16 @@ export default function MetricsPage() {
                             <span>Llamadas: {c.totals.calls}</span>
                             <span>Completados: {c.totals.leadsCompleted}</span>
                             <span>Saltos: {c.totals.leadsSkipped}</span>
-                            <span>Interesados: {getBucketValue(c.totals.buckets, 'interesado')}</span>
-                            <span>Agendados: {getBucketValue(c.totals.buckets, 'agendado')}</span>
-                            <span>No contesta: {getBucketValue(c.totals.buckets, 'no_contesta')}</span>
-                            <span>Perdidos: {getBucketValue(c.totals.buckets, 'perdido')}</span>
+                            <span>🟢 Contacto efectivo: {getBucketGroup(c.totals.buckets, 'contacto_efectivo', 'interesado', 'contactado')}</span>
+                            <span>🏆 Conversión: {getBucketGroup(c.totals.buckets, 'conversion', 'agendado', 'publicada', 'reservada', 'arrendada')}</span>
+                            <span>📵 Sin contacto: {getBucketGroup(c.totals.buckets, 'no_contacto', 'no_contesta')}</span>
+                            <span>🔄 Seguimiento: {getBucketGroup(c.totals.buckets, 'seguimiento', 'futuro')}</span>
+                            <span>🚫 Descarte: {getBucketGroup(c.totals.buckets, 'descarte', 'perdido', 'falso', 'caro')}</span>
                             <span>
                               Contact rate:{' '}
                               {(() => {
-                                const contacted =
-                                  getBucketValue(c.totals.buckets, 'interesado') +
-                                  getBucketValue(c.totals.buckets, 'agendado');
+                                const contacted = getBucketGroup(c.totals.buckets,
+                                  'contacto_efectivo', 'conversion', 'interesado', 'agendado', 'publicada', 'reservada', 'arrendada', 'contactado');
                                 const totalCalls = c.totals.calls || 0;
                                 if (!totalCalls) return '0%';
                                 return `${Math.round((contacted / totalCalls) * 100)}%`;
@@ -783,9 +789,8 @@ export default function MetricsPage() {
                             <span>
                               Contacto:{' '}
                               {(() => {
-                                const contacted =
-                                  getBucketValue(exec.buckets, 'interesado') +
-                                  getBucketValue(exec.buckets, 'agendado');
+                                const contacted = getBucketGroup(exec.buckets,
+                                  'contacto_efectivo', 'conversion', 'interesado', 'agendado', 'publicada', 'reservada', 'arrendada', 'contactado');
                                 const total = exec.calls || 0;
                                 if (!total) return '0%';
                                 return `${Math.round((contacted / total) * 100)}%`;
