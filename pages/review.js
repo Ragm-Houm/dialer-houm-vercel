@@ -1753,7 +1753,7 @@ export default function ReviewPage() {
         ];
 
         return (
-          <div className="modal">
+          <div className="modal detail-overlay">
             <div className="detail-modal">
               {/* Header */}
               <div className="detail-header">
@@ -3464,6 +3464,15 @@ export default function ReviewPage() {
           gap: 8px;
         }
 
+        /* ── Detail modal overlay fix ── */
+        .detail-overlay {
+          display: flex;
+          align-items: flex-start;
+          justify-content: center;
+          padding: 40px 24px;
+          overflow-y: auto;
+        }
+
         /* ── Detail modal redesign ── */
         .detail-modal {
           background: var(--surface);
@@ -3475,6 +3484,7 @@ export default function ReviewPage() {
           flex-direction: column;
           overflow: hidden;
           box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+          margin: auto;
         }
         .detail-header {
           display: flex;
