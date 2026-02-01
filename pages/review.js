@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { ChevronRight, Loader2, ShieldAlert, Trash2, Plus, User, BarChart3, Phone, XCircle, CheckCircle2, Clock, CalendarClock, RotateCcw, FileText, Zap, ToggleLeft, ToggleRight, Info, X, Filter } from 'lucide-react';
+import { ChevronRight, Loader2, ShieldAlert, Trash2, Plus, User, BarChart3, Phone, XCircle, CheckCircle2, Clock, CalendarClock, RotateCcw, FileText, Zap, ToggleLeft, ToggleRight, Info, X, Filter, HelpCircle } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import { useSession } from '../lib/session';
 import { buildPhoneCandidates, getCountryConfig } from '../lib/review';
@@ -1719,109 +1719,238 @@ export default function ReviewPage() {
         </div>
       </div>
 
-      {detail && (
-        <div className="modal">
-          <div className="modal-card">
-            <div className="modal-header">
-              <div>
-                <div className="modal-title">{detail.campaign.name}</div>
-                <div className="modal-sub">{detail.campaign.country} · {detail.campaign.stage_name}</div>
-              </div>
-              <button className="btn btn-secondary" onClick={() => setDetail(null)}>Cerrar</button>
-            </div>
-            <div className="modal-stats">
-              <div className="card stat-card">
-                <div className="stat-label">Contactados</div>
-                <div className="stat-value">{detail.totals.contacted}</div>
-              </div>
-              <div className="card stat-card">
-                <div className="stat-label">Sin contactar (total)</div>
-                <div className="stat-value">{detail.totals.pending}</div>
-              </div>
-              {detail.totals?.availability && (
-                <div className="card stat-card">
-                  <div className="stat-label">Disponibles</div>
-                  <div className="stat-value">{detail.totals.availability.eligible || 0}</div>
+      {detail && (() => {
+        const t = detail.totals;
+        const total = (t.contacted || 0) + (t.pending || 0);
+        const contactedPct = total > 0 ? Math.round(((t.contacted || 0) / total) * 100) : 0;
+        const av = t.availability || {};
+        const effStatus = detail.campaign.effective_status || detail.campaign.status;
+        const statusLabels = { active: 'Activa', inactive: 'Inactiva', terminated: 'Terminada' };
+        const statusColors = { active: '#22c55e', inactive: '#f59e0b', terminated: '#ef4444' };
+
+        const bucketGroups = [
+          { emoji: '🟢', label: 'Contacto efectivo', keys: ['contacto_efectivo', 'interesado', 'contactado'], color: '#22c55e' },
+          { emoji: '🏆', label: 'Conversión', keys: ['conversion', 'agendado', 'publicada', 'reservada', 'arrendada'], color: '#a855f7' },
+          { emoji: '📵', label: 'Sin contacto', keys: ['no_contacto', 'no_contesta'], color: '#64748b' },
+          { emoji: '🔄', label: 'Seguimiento', keys: ['seguimiento', 'futuro'], color: '#3b82f6' },
+          { emoji: '🚫', label: 'Descarte', keys: ['descarte', 'perdido', 'falso', 'caro'], color: '#ef4444' },
+          { emoji: '📋', label: 'Otro', keys: ['otro'], color: '#94a3b8' }
+        ];
+        const b = t.buckets || {};
+        const bucketData = bucketGroups.map(g => ({
+          ...g,
+          total: g.keys.reduce((s, k) => s + (b[k] || 0), 0)
+        })).filter(bd => bd.total > 0);
+        const maxBucket = Math.max(...bucketData.map(bd => bd.total), 1);
+
+        const avItems = [
+          { label: 'Pendientes totales', value: av.totalPending || 0, tip: 'Total de leads que aún no han sido contactados en esta campaña' },
+          { label: 'Disponibles ahora', value: av.eligible || 0, tip: 'Leads listos para ser asignados a un ejecutivo en este momento' },
+          { label: 'Sin teléfono', value: av.noPhone || 0, tip: 'Leads que no tienen un número de teléfono registrado' },
+          { label: 'En cooldown', value: av.cooldown || 0, tip: 'Leads en espera entre intentos de llamada' },
+          { label: 'Max intentos', value: av.maxAttempts || 0, tip: 'Leads que ya alcanzaron el máximo de intentos de contacto' },
+          { label: 'Bloqueados', value: av.locked || 0, tip: 'Leads actualmente asignados a otro ejecutivo' }
+        ];
+
+        return (
+          <div className="modal">
+            <div className="detail-modal">
+              {/* Header */}
+              <div className="detail-header">
+                <div className="detail-header-info">
+                  <div className="detail-title-row">
+                    <h2 className="detail-title">{detail.campaign.name}</h2>
+                    <span className="detail-badge" style={{ background: `${statusColors[effStatus]}18`, color: statusColors[effStatus], border: `1px solid ${statusColors[effStatus]}33` }}>
+                      <span className="detail-badge-dot" style={{ background: statusColors[effStatus] }} />
+                      {statusLabels[effStatus] || effStatus}
+                    </span>
+                  </div>
+                  <div className="detail-meta">
+                    {detail.campaign.country && <span>{detail.campaign.country}</span>}
+                    {detail.campaign.stage_name && <><span>·</span><span>{detail.campaign.stage_name}</span></>}
+                    {detail.campaign.close_at && !detail.campaign.no_time_limit && (
+                      <><span>·</span><span>Cierre: {new Date(detail.campaign.close_at).toLocaleDateString()}</span></>
+                    )}
+                    {detail.campaign.no_time_limit && <><span>·</span><span>Sin límite de tiempo</span></>}
+                  </div>
                 </div>
-              )}
-            </div>
-            {detail.totals?.availability && (
-              <div className="status-note" style={{ marginTop: '10px' }}>
-                Pendientes: {detail.totals.availability.totalPending || 0} · Sin teléfono: {detail.totals.availability.noPhone || 0} · En cooldown: {detail.totals.availability.cooldown || 0} · Max intentos: {detail.totals.availability.maxAttempts || 0} · Bloqueados: {detail.totals.availability.locked || 0}
-              </div>
-            )}
-            <div className="outcomes">
-              {detail.outcomes.map((outcome) => (
-                <div key={outcome.key} className="outcome">
-                  <span>{outcome.label}</span>
-                  <strong>{detail.totals.outcomes[outcome.key] || 0}</strong>
-                </div>
-              ))}
-            </div>
-            {detail.totals?.buckets && Object.keys(detail.totals.buckets).length > 0 && (
-              <div className="outcomes" style={{ marginTop: '12px' }}>
-                {(() => {
-                  const b = detail.totals.buckets;
-                  const groups = [
-                    { label: '🟢 Contacto efectivo', keys: ['contacto_efectivo', 'interesado', 'contactado'] },
-                    { label: '🏆 Conversión', keys: ['conversion', 'agendado', 'publicada', 'reservada', 'arrendada'] },
-                    { label: '📵 Sin contacto', keys: ['no_contacto', 'no_contesta'] },
-                    { label: '🔄 Seguimiento', keys: ['seguimiento', 'futuro'] },
-                    { label: '🚫 Descarte', keys: ['descarte', 'perdido', 'falso', 'caro'] },
-                    { label: '📋 Otro', keys: ['otro'] }
-                  ];
-                  return groups.map(g => {
-                    const total = g.keys.reduce((s, k) => s + (b[k] || 0), 0);
-                    if (total === 0) return null;
-                    return (
-                      <div key={g.label} className="outcome">
-                        <span>{g.label}</span>
-                        <strong>{total}</strong>
-                      </div>
-                    );
-                  }).filter(Boolean);
-                })()}
-              </div>
-            )}
-            <div className="executives">
-              <div className="exec-title">Ejecutivos en campaña</div>
-              {detail.executives.length === 0 && <div className="empty">Sin registros aun</div>}
-              {detail.executives.map((exec) => (
-                <div key={exec.email} className="exec-row">
-                  <span>{exec.email}</span>
-                  <span>{exec.handled} gestionados</span>
-                  <span>{exec.contacted} contactados</span>
-                </div>
-              ))}
-            </div>
-            <div className="modal-actions">
-              <div className="switch-row">
-                <span>Estado de campaña</span>
-                <label className="switch">
-                  <input
-                    type="checkbox"
-                    checked={detail.campaign.status === 'active'}
-                    onChange={(event) =>
-                      handleToggleCampaign(detail.campaign.campaign_key, event.target.checked ? 'active' : 'inactive')
-                    }
-                  />
-                  <span className="slider" />
-                </label>
-              </div>
-              {detailStatusNote && <div className="status-note">{detailStatusNote}</div>}
-              {userRole !== 'ejecutivo' && (
-                <button
-                  type="button"
-                  className="btn btn-danger"
-                  onClick={() => handleDeleteCampaign(detail.campaign.campaign_key)}
-                >
-                  Eliminar campaña
+                <button className="detail-close" onClick={() => setDetail(null)} title="Cerrar">
+                  <X style={{ width: 20, height: 20 }} />
                 </button>
-              )}
+              </div>
+
+              <div className="detail-body">
+                {/* Progreso */}
+                <div className="detail-section">
+                  <div className="detail-section-title">
+                    <BarChart3 style={{ width: 16, height: 16 }} /> Progreso de campaña
+                  </div>
+                  <div className="detail-kpi-grid">
+                    <div className="detail-kpi">
+                      <div className="detail-kpi-value">{total}</div>
+                      <div className="detail-kpi-label">
+                        Total leads
+                        <span className="zapier-tooltip-trigger"><HelpCircle style={{width:13,height:13}} /><span className="zapier-tooltip-popup">Cantidad total de leads cargados en esta campaña</span></span>
+                      </div>
+                    </div>
+                    <div className="detail-kpi kpi-success">
+                      <div className="detail-kpi-value">{t.contacted || 0}</div>
+                      <div className="detail-kpi-label">
+                        Contactados
+                        <span className="zapier-tooltip-trigger"><HelpCircle style={{width:13,height:13}} /><span className="zapier-tooltip-popup">Leads que ya fueron contactados y tienen un resultado registrado</span></span>
+                      </div>
+                    </div>
+                    <div className="detail-kpi kpi-warning">
+                      <div className="detail-kpi-value">{t.pending || 0}</div>
+                      <div className="detail-kpi-label">
+                        Pendientes
+                        <span className="zapier-tooltip-trigger"><HelpCircle style={{width:13,height:13}} /><span className="zapier-tooltip-popup">Leads que aún no han sido contactados</span></span>
+                      </div>
+                    </div>
+                    <div className="detail-kpi kpi-primary">
+                      <div className="detail-kpi-value">{av.eligible || 0}</div>
+                      <div className="detail-kpi-label">
+                        Disponibles
+                        <span className="zapier-tooltip-trigger"><HelpCircle style={{width:13,height:13}} /><span className="zapier-tooltip-popup">Leads listos para ser asignados ahora mismo a un ejecutivo</span></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="detail-progress-row">
+                    <div className="detail-progress-bar">
+                      <div className="detail-progress-fill" style={{ width: `${contactedPct}%` }} />
+                    </div>
+                    <span className="detail-progress-pct">{contactedPct}%</span>
+                  </div>
+                </div>
+
+                {/* Disponibilidad */}
+                {t.availability && (
+                  <div className="detail-section">
+                    <div className="detail-section-title">
+                      <Phone style={{ width: 16, height: 16 }} /> Disponibilidad de leads
+                    </div>
+                    <div className="detail-avail-grid">
+                      {avItems.map(item => (
+                        <div key={item.label} className="detail-avail-item">
+                          <div className="detail-avail-value">{item.value}</div>
+                          <div className="detail-avail-label">
+                            {item.label}
+                            <span className="zapier-tooltip-trigger"><HelpCircle style={{width:12,height:12}} /><span className="zapier-tooltip-popup">{item.tip}</span></span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Clasificación por buckets */}
+                {bucketData.length > 0 && (
+                  <div className="detail-section">
+                    <div className="detail-section-title">
+                      <Zap style={{ width: 16, height: 16 }} /> Clasificación de resultados
+                    </div>
+                    <div className="detail-bucket-list">
+                      {bucketData.map(bd => (
+                        <div key={bd.label} className="detail-bucket-row">
+                          <div className="detail-bucket-info">
+                            <span className="detail-bucket-emoji">{bd.emoji}</span>
+                            <span className="detail-bucket-name">{bd.label}</span>
+                            <span className="detail-bucket-count">{bd.total}</span>
+                          </div>
+                          <div className="detail-bucket-bar">
+                            <div className="detail-bucket-fill" style={{ width: `${(bd.total / maxBucket) * 100}%`, background: bd.color }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Resultados individuales */}
+                {detail.outcomes.length > 0 && (
+                  <div className="detail-section">
+                    <div className="detail-section-title">
+                      <FileText style={{ width: 16, height: 16 }} /> Resultados por tipo
+                    </div>
+                    <div className="detail-outcomes-grid">
+                      {detail.outcomes.map(outcome => {
+                        const count = t.outcomes[outcome.key] || 0;
+                        return (
+                          <div key={outcome.key} className={`detail-outcome-chip ${count > 0 ? 'has-count' : ''}`}>
+                            <span className="detail-outcome-label">{outcome.label}</span>
+                            <span className="detail-outcome-count">{count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Ejecutivos */}
+                <div className="detail-section">
+                  <div className="detail-section-title">
+                    <User style={{ width: 16, height: 16 }} /> Ejecutivos en campaña
+                    <span className="zapier-tooltip-trigger"><HelpCircle style={{width:13,height:13}} /><span className="zapier-tooltip-popup">Ejecutivos asignados a esta campaña con su progreso individual</span></span>
+                  </div>
+                  {detail.executives.length === 0 && <div className="empty">Sin ejecutivos asignados aún</div>}
+                  <div className="detail-exec-list">
+                    {detail.executives.map(exec => {
+                      const execPct = exec.handled > 0 ? Math.round((exec.contacted / exec.handled) * 100) : 0;
+                      const initial = (exec.email || '?')[0].toUpperCase();
+                      return (
+                        <div key={exec.email} className="detail-exec-card">
+                          <div className="detail-exec-header">
+                            <div className="detail-exec-avatar">{initial}</div>
+                            <div className="detail-exec-info">
+                              <div className="detail-exec-email">{exec.email}</div>
+                              <div className="detail-exec-stats">
+                                {exec.handled} gestionados · {exec.contacted} contactados
+                              </div>
+                            </div>
+                          </div>
+                          <div className="detail-exec-bar">
+                            <div className="detail-exec-fill" style={{ width: `${execPct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="detail-footer">
+                <div className="detail-footer-left">
+                  <div className="switch-row">
+                    <span>Estado</span>
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={detail.campaign.status === 'active'}
+                        onChange={(event) =>
+                          handleToggleCampaign(detail.campaign.campaign_key, event.target.checked ? 'active' : 'inactive')
+                        }
+                      />
+                      <span className="slider" />
+                    </label>
+                    <span className="zapier-tooltip-trigger"><HelpCircle style={{width:13,height:13}} /><span className="zapier-tooltip-popup">Activa o desactiva esta campaña. Al desactivarla, no aparecerá en el dialer</span></span>
+                  </div>
+                  {detailStatusNote && <div className="status-note">{detailStatusNote}</div>}
+                </div>
+                {userRole !== 'ejecutivo' && (
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => handleDeleteCampaign(detail.campaign.campaign_key)}
+                  >
+                    Eliminar
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {wizardOpen && (
         <div className="modal wizard-modal">
@@ -3333,6 +3462,348 @@ export default function ReviewPage() {
           display: flex;
           flex-direction: column;
           gap: 8px;
+        }
+
+        /* ── Detail modal redesign ── */
+        .detail-modal {
+          background: var(--surface);
+          border-radius: 20px;
+          border: 1px solid var(--border-subtle);
+          width: min(780px, 95vw);
+          max-height: min(88vh, 940px);
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+        }
+        .detail-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 20px 24px 16px;
+          border-bottom: 1px solid var(--border);
+          background: var(--surface);
+          flex-shrink: 0;
+        }
+        .detail-header-info {
+          flex: 1;
+          min-width: 0;
+        }
+        .detail-title-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .detail-title {
+          margin: 0;
+          font-size: 20px;
+          font-weight: 700;
+          color: var(--text-primary);
+        }
+        .detail-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          font-weight: 700;
+          padding: 3px 10px;
+          border-radius: 20px;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+          white-space: nowrap;
+        }
+        .detail-badge-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+        .detail-meta {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-top: 6px;
+          font-size: 12px;
+          color: var(--text-muted);
+          flex-wrap: wrap;
+        }
+        .detail-close {
+          background: var(--surface-alt);
+          border: 1px solid var(--border);
+          color: var(--text-muted);
+          cursor: pointer;
+          padding: 6px;
+          border-radius: 10px;
+          transition: all 0.15s;
+          flex-shrink: 0;
+        }
+        .detail-close:hover {
+          background: var(--danger-bg);
+          border-color: var(--danger-border);
+          color: var(--danger-strong);
+        }
+        .detail-body {
+          padding: 20px 24px;
+          overflow-y: auto;
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 24px;
+          overscroll-behavior: contain;
+        }
+        .detail-section {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .detail-section-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.4px;
+          color: var(--text-secondary);
+        }
+        .detail-kpi-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 10px;
+        }
+        .detail-kpi {
+          background: var(--surface-alt);
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          padding: 14px;
+          text-align: center;
+        }
+        .detail-kpi.kpi-success { border-color: rgba(34,197,94,0.3); background: rgba(34,197,94,0.06); }
+        .detail-kpi.kpi-warning { border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.06); }
+        .detail-kpi.kpi-primary { border-color: rgba(99,102,241,0.3); background: rgba(99,102,241,0.06); }
+        .detail-kpi-value {
+          font-size: 28px;
+          font-weight: 800;
+          color: var(--text-primary);
+          line-height: 1.1;
+        }
+        .detail-kpi.kpi-success .detail-kpi-value { color: #22c55e; }
+        .detail-kpi.kpi-warning .detail-kpi-value { color: #f59e0b; }
+        .detail-kpi.kpi-primary .detail-kpi-value { color: #6366f1; }
+        .detail-kpi-label {
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--text-muted);
+          margin-top: 4px;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+        }
+        .detail-progress-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .detail-progress-bar {
+          flex: 1;
+          height: 8px;
+          background: var(--surface-alt);
+          border-radius: 99px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+        }
+        .detail-progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #22c55e, #16a34a);
+          border-radius: 99px;
+          transition: width 0.5s ease;
+        }
+        .detail-progress-pct {
+          font-size: 14px;
+          font-weight: 700;
+          color: #22c55e;
+          min-width: 40px;
+          text-align: right;
+        }
+        .detail-avail-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+        }
+        .detail-avail-item {
+          background: var(--surface-alt);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 10px 12px;
+          text-align: center;
+        }
+        .detail-avail-value {
+          font-size: 20px;
+          font-weight: 700;
+          color: var(--text-primary);
+        }
+        .detail-avail-label {
+          font-size: 10px;
+          font-weight: 600;
+          color: var(--text-muted);
+          margin-top: 2px;
+          text-transform: uppercase;
+          letter-spacing: 0.2px;
+        }
+        .detail-bucket-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .detail-bucket-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .detail-bucket-info {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 200px;
+          flex-shrink: 0;
+        }
+        .detail-bucket-emoji {
+          font-size: 16px;
+        }
+        .detail-bucket-name {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+        .detail-bucket-count {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--text-secondary);
+          margin-left: auto;
+        }
+        .detail-bucket-bar {
+          flex: 1;
+          height: 10px;
+          background: var(--surface-alt);
+          border-radius: 99px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+        }
+        .detail-bucket-fill {
+          height: 100%;
+          border-radius: 99px;
+          transition: width 0.4s ease;
+        }
+        .detail-outcomes-grid {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+        .detail-outcome-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 5px 12px;
+          border-radius: 20px;
+          border: 1px solid var(--border);
+          background: var(--surface-alt);
+          font-size: 12px;
+        }
+        .detail-outcome-chip.has-count {
+          border-color: rgba(99,102,241,0.25);
+          background: rgba(99,102,241,0.06);
+        }
+        .detail-outcome-label {
+          font-weight: 500;
+          color: var(--text-secondary);
+        }
+        .detail-outcome-count {
+          font-weight: 700;
+          color: var(--text-primary);
+        }
+        .detail-outcome-chip.has-count .detail-outcome-count {
+          color: #6366f1;
+        }
+        .detail-exec-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .detail-exec-card {
+          background: var(--surface-alt);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 12px 14px;
+        }
+        .detail-exec-header {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .detail-exec-avatar {
+          width: 34px;
+          height: 34px;
+          border-radius: 10px;
+          background: linear-gradient(135deg, #6366f1, #8b5cf6);
+          color: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 700;
+          font-size: 14px;
+          flex-shrink: 0;
+        }
+        .detail-exec-info {
+          flex: 1;
+          min-width: 0;
+        }
+        .detail-exec-email {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .detail-exec-stats {
+          font-size: 11px;
+          color: var(--text-muted);
+          margin-top: 2px;
+        }
+        .detail-exec-bar {
+          margin-top: 8px;
+          height: 5px;
+          background: var(--surface);
+          border-radius: 99px;
+          overflow: hidden;
+        }
+        .detail-exec-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #6366f1, #8b5cf6);
+          border-radius: 99px;
+          transition: width 0.4s ease;
+        }
+        .detail-footer {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 14px 24px;
+          border-top: 1px solid var(--border);
+          background: var(--surface);
+          flex-shrink: 0;
+        }
+        .detail-footer-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        @media (max-width: 640px) {
+          .detail-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+          .detail-avail-grid { grid-template-columns: repeat(2, 1fr); }
+          .detail-bucket-info { min-width: 140px; }
         }
         .wizard-section {
           display: grid;
