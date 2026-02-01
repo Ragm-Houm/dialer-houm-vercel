@@ -1860,9 +1860,10 @@ export default function Home() {
     }
   };
 
-  // Construir URL de Pipedrive
+  // Construir URL de Pipedrive (usa dominio dinámico del API)
   const getPipedriveUrl = (dealId) => {
-    return `https://arriendoasegurado.pipedrive.com/deal/${dealId}`;
+    const domain = currentLead?.pipedriveDomain || process.env.NEXT_PUBLIC_PIPEDRIVE_DOMAIN || 'arriendoasegurado';
+    return `https://${domain}.pipedrive.com/deal/${dealId}`;
   };
 
   const getWhatsappLink = (phone) => {

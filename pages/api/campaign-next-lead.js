@@ -3,6 +3,7 @@ const { getDealContext } = require('../../lib/pipedrive');
 const { requireUser } = require('../../lib/auth');
 
 const MAX_ATTEMPTS = Number(process.env.DIALER_MAX_ATTEMPTS || 3);
+const PIPEDRIVE_DOMAIN = process.env.PIPEDRIVE_DOMAIN || '';
 const MIN_HOURS_BETWEEN_ATTEMPTS = Number(process.env.DIALER_MIN_HOURS_BETWEEN_ATTEMPTS || 1);
 const MAX_GESTIONS = Number(process.env.DIALER_MAX_GESTIONS || 5);
 
@@ -82,7 +83,8 @@ export default async function handler(req, res) {
       stageId: claimed.stage_id,
       stageName: claimed.stage_name,
       campaignKey,
-      pipedrive
+      pipedrive,
+      pipedriveDomain: PIPEDRIVE_DOMAIN
     });
   } catch (error) {
     console.error('Error en campaign-next-lead:', error);

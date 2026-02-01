@@ -1,6 +1,7 @@
 const { createNote, createCallActivity, createActivity, getDealById, listOpenDealActivities, updateActivityDone } = require('../../lib/pipedrive');
 const { requireCsrf } = require('../../lib/csrf');
 const { requireRateLimit } = require('../../lib/rate-limit');
+const { requireUser } = require('../../lib/auth');
 
 function extractId(value) {
   if (!value) return null;
@@ -66,6 +67,12 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Validar usuario autenticado
+  const auth = await requireUser(req);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ error: auth.error });
+  }
+
   try {
     const { dealId, lead, resultado, notas, proximaAccion, duracion, status, nextTaskDate, nextTaskTime, nextTaskType } = req.body || {};
 
@@ -112,9 +119,13 @@ export default async function handler(req, res) {
         whatsapp: 'task',
         email: 'email',
         visita: 'meeting',
-        seguimiento: 'task'
+        seguimiento: 'task',
+        tarea: 'task'
       };
       const followType = typeMap[nextTaskType] || 'task';
+      if (nextTaskType && !typeMap[nextTaskType]) {
+        console.warn(`Tipo de actividad desconocido: "${nextTaskType}", usando "task" como fallback`);
+      }
       const followSubject = `Seguimiento: ${nextTaskType || 'tarea'}`;
       followUp = await createActivity({
         dealId,
@@ -133,6 +144,6 @@ export default async function handler(req, res) {
     res.status(200).json({ note, activity, followUp, closedActivity });
   } catch (error) {
     console.error('Error en pipedrive-log:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Error al registrar en Pipedrive' });
   }
 }

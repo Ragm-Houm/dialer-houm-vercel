@@ -1,6 +1,7 @@
 const { updateDealStage, updateDealOwner, updateDealStatus } = require('../../lib/pipedrive');
 const { requireCsrf } = require('../../lib/csrf');
 const { requireRateLimit } = require('../../lib/rate-limit');
+const { requireUser } = require('../../lib/auth');
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -15,6 +16,12 @@ export default async function handler(req, res) {
   // Validar CSRF token
   if (!requireCsrf(req, res)) {
     return;
+  }
+
+  // Validar usuario autenticado
+  const auth = await requireUser(req);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ error: auth.error });
   }
 
   try {
@@ -37,6 +44,6 @@ export default async function handler(req, res) {
     res.status(200).json({ deal });
   } catch (error) {
     console.error('Error actualizando deal:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Error al actualizar deal en Pipedrive' });
   }
 }
