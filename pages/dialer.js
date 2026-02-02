@@ -3,6 +3,8 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import AppHeader from '../components/AppHeader';
+import ErrorModal from '../components/ErrorModal';
+import { useToast } from '../components/Toast';
 import { useSession } from '../lib/session';
 import {
   BarChart3,
@@ -133,6 +135,10 @@ export default function Home() {
   const { session, isSessionReady, sessionError, updateSession, clearSession, csrfFetch } = useSession();
   const audioStreamRef = useRef(null);
   const audioContextRef = useRef(null);
+  const toast = useToast();
+  const [errorModal, setErrorModal] = useState({ open: false, title: '', message: '', technicalDetail: '', icon: 'error' });
+  const showError = (opts) => setErrorModal({ open: true, ...opts });
+  const closeErrorModal = () => setErrorModal(prev => ({ ...prev, open: false }));
   const analyserRef = useRef(null);
   const audioMeterRafRef = useRef(null);
 
@@ -593,7 +599,7 @@ export default function Home() {
     if (isSessionLoading) return;
     const country = paisRef.current;
     if (!email || !country) {
-      alert('Inicia sesion con Google. Si falta el pais, pide que lo configuren.');
+      toast.warning('Inicia sesión con Google. Si falta el país, pide que lo configuren.');
       return;
     }
 
@@ -607,7 +613,12 @@ export default function Home() {
       });
       const meData = await meRes.json();
       if (!meRes.ok) {
-        alert(meData.error || 'Usuario no autorizado');
+        showError({
+          title: 'Usuario no autorizado',
+          message: 'No tienes permisos para acceder al dialer. Contacta a un administrador.',
+          technicalDetail: meData.error || 'Auth failed',
+          icon: 'auth'
+        });
         return;
       }
       const verifiedEmail = meData.user.email;
@@ -628,7 +639,12 @@ export default function Home() {
       });
 
       if (!sdkLoaded || !DeviceClass) {
-        alert('Twilio SDK no está cargado. Recarga la página.');
+        showError({
+          title: 'SDK no disponible',
+          message: 'El sistema de llamadas no se cargó correctamente. Recarga la página.',
+          technicalDetail: 'Twilio SDK not loaded. DeviceClass=' + !!DeviceClass + ' sdkLoaded=' + sdkLoaded,
+          icon: 'connection'
+        });
         return;
       }
 
@@ -643,7 +659,12 @@ export default function Home() {
         stream.getTracks().forEach(track => track.stop());
       } catch (micError) {
         console.error('❌ Error obteniendo permisos de micrófono:', micError);
-        alert('Debes permitir el acceso al micrófono para usar el dialer. Por favor recarga y acepta los permisos.');
+        showError({
+          title: 'Micrófono no disponible',
+          message: 'Debes permitir el acceso al micrófono para usar el dialer. Recarga la página y acepta los permisos.',
+          technicalDetail: micError?.message || 'Microphone permission denied',
+          icon: 'mic'
+        });
         return;
       }
 
@@ -703,7 +724,12 @@ export default function Home() {
           return;
         }
         updateStatus('error', 'Error');
-        alert('Error Twilio: ' + (error.message || 'Unknown error'));
+        showError({
+          title: 'Error de conexión',
+          message: 'Hubo un error con el sistema de llamadas. Si persiste, contacta a un administrador.',
+          technicalDetail: 'Twilio Error: ' + (error.message || 'Unknown') + (error?.code ? ' (Code: ' + error.code + ')' : '') + (error?.twilioError?.code ? ' (TwilioCode: ' + error.twilioError.code + ')' : ''),
+          icon: 'connection'
+        });
       });
 
       device.on('connect', (call) => {
@@ -730,7 +756,12 @@ export default function Home() {
       console.log('⏳ Device registration initiated...');
     } catch (error) {
       console.error('❌ Error iniciando sesión:', error);
-      alert('Error iniciando sesión: ' + error.message);
+      showError({
+        title: 'Error al iniciar sesión',
+        message: 'No se pudo conectar al sistema de llamadas. Intenta de nuevo.',
+        technicalDetail: error?.message || 'Session start failed',
+        icon: 'error'
+      });
     } finally {
       setIsSessionLoading(false);
     }
@@ -1158,11 +1189,11 @@ export default function Home() {
     }
     if (!device || !lead) {
       console.warn('makeCall: device=', !!device, 'lead=', !!lead);
-      alert('No hay Twilio Device o lead');
+      toast.error('Error de conexión. Reinicia la sesión para continuar.');
       return;
     }
     if (!cid) {
-      alert('No tienes Caller ID asignado. Pide que lo configuren en Twilio.');
+      toast.warning('No tienes Caller ID asignado. Pide que lo configuren en Twilio.');
       return;
     }
 
@@ -1670,7 +1701,7 @@ export default function Home() {
 
   const submitSkipForm = async () => {
     if (!skipReason) {
-      alert('Selecciona un motivo para saltar el lead');
+      toast.warning('Selecciona un motivo para saltar el lead');
       return;
     }
     if (!currentLead?.campaignKey || !currentLead?.pipedriveDealId) {
@@ -5984,6 +6015,16 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      <ErrorModal
+        open={errorModal.open}
+        onClose={closeErrorModal}
+        title={errorModal.title}
+        message={errorModal.message}
+        technicalDetail={errorModal.technicalDetail}
+        role={userRole}
+        icon={errorModal.icon}
+      />
     </>
   );
 }

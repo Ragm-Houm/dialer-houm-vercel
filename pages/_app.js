@@ -1,9 +1,11 @@
 import Head from 'next/head';
 import { SessionProvider } from '../lib/session';
+import { ToastProvider } from '../components/Toast';
 
 export default function App({ Component, pageProps }) {
   return (
     <SessionProvider>
+      <ToastProvider>
       <Head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -13,6 +15,7 @@ export default function App({ Component, pageProps }) {
         />
       </Head>
       <Component {...pageProps} />
+      </ToastProvider>
       <style jsx global>{`
         :global(body) {
           margin: 0;
