@@ -7,14 +7,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { country } = req.query;
+    const { country, debug } = req.query;
     const config = getCountryConfig(country);
     if (!config) {
       return res.status(400).json({ error: 'Pais invalido' });
     }
 
     const stages = await listStages(config.pipelineId);
-    res.status(200).json({
+    const result = {
       country,
       pipelineId: config.pipelineId,
       defaultStageId: config.defaultStageId,
@@ -23,7 +23,19 @@ export default async function handler(req, res) {
         name: stage.name,
         pipelineId: stage.pipeline_id
       }))
-    });
+    };
+
+    if (debug === 'true') {
+      result._debug = {
+        rawStagesCount: stages.length,
+        hasDomain: !!process.env.PIPEDRIVE_DOMAIN,
+        hasToken: !!process.env.PIPEDRIVE_API_TOKEN,
+        tokenLen: (process.env.PIPEDRIVE_API_TOKEN || '').length,
+        domainVal: (process.env.PIPEDRIVE_DOMAIN || '').slice(0, 15) + '...'
+      };
+    }
+
+    res.status(200).json(result);
   } catch (error) {
     console.error('Error en review-stages:', error);
     res.status(500).json({ error: error.message });
