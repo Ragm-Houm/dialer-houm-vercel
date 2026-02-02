@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { ChevronRight, Loader2, ShieldAlert, Trash2, Plus, User, BarChart3, Phone, XCircle, CheckCircle2, Clock, CalendarClock, RotateCcw, FileText, Zap, ToggleLeft, ToggleRight, Info, X, Filter, HelpCircle } from 'lucide-react';
+import { ChevronRight, Loader2, ShieldAlert, Trash2, Plus, User, BarChart3, Phone, XCircle, CheckCircle2, Clock, CalendarClock, RotateCcw, FileText, Zap, ToggleLeft, ToggleRight, Info, X, Filter, HelpCircle, AlertTriangle } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
+import { useToast } from '../components/Toast';
 import { useSession } from '../lib/session';
 import { buildPhoneCandidates, getCountryConfig } from '../lib/review';
 
@@ -385,6 +386,8 @@ export default function ReviewPage() {
   const [reactivateCampaign, setReactivateCampaign] = useState(null);
   const [reactivateNoLimit, setReactivateNoLimit] = useState(false);
   const [reactivatePreset, setReactivatePreset] = useState('2h');
+  const [confirmModal, setConfirmModal] = useState({ open: false, title: '', message: '', onConfirm: null, danger: false });
+  const toast = useToast();
   const [outcomes, setOutcomes] = useState([]);
   const [outcomesLoading, setOutcomesLoading] = useState(false);
   const [newOutcomeLabel, setNewOutcomeLabel] = useState('');
@@ -1131,28 +1134,36 @@ export default function ReviewPage() {
     }
   };
 
-  const handleDeleteCampaign = async (campaignKey) => {
+  const handleDeleteCampaign = (campaignKey) => {
     if (!campaignKey) return;
-    const confirmed = window.confirm('¿Eliminar esta campaña? Se borrarán también sus leads asociados.');
-    if (!confirmed) return;
-    try {
-      const res = await csrfFetch('/api/campaigns', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignKey })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setDetailStatusNote(data.error || 'No se pudo eliminar la campaña.');
-        return;
+    setConfirmModal({
+      open: true,
+      title: 'Eliminar campaña',
+      message: '¿Estás seguro? Se eliminarán también todos los leads asociados. Esta acción no se puede deshacer.',
+      danger: true,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, open: false }));
+        try {
+          const res = await csrfFetch('/api/campaigns', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campaignKey })
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            toast.error(data.error || 'No se pudo eliminar la campaña.');
+            return;
+          }
+          setDetail(null);
+          setDetailStatusNote('');
+          loadCampaigns();
+          toast.success('Campaña eliminada correctamente.');
+        } catch (error) {
+          console.error('Error eliminando campaña:', error);
+          toast.error('Error eliminando la campaña.');
+        }
       }
-      setDetail(null);
-      setDetailStatusNote('');
-      loadCampaigns();
-    } catch (error) {
-      console.error('Error eliminando campaña:', error);
-      setDetailStatusNote('Error eliminando campaña.');
-    }
+    });
   };
 
   const createOutcome = async () => {
@@ -1546,7 +1557,7 @@ export default function ReviewPage() {
                             <button
                               type="button"
                               className="icon-btn subtle-delete"
-                              onClick={() => { if (confirm(`¿Eliminar "${outcome.label}"?`)) deleteOutcome(outcome.id); }}
+                              onClick={() => setConfirmModal({ open: true, title: 'Eliminar resultado', message: `¿Eliminar "${outcome.label}"? Esta acción no se puede deshacer.`, danger: true, onConfirm: () => { setConfirmModal(prev => ({ ...prev, open: false })); deleteOutcome(outcome.id); } })}
                               title={`Eliminar ${outcome.label}`}
                             >
                               <Trash2 style={{width:14,height:14}} />
@@ -2537,7 +2548,7 @@ export default function ReviewPage() {
       )}
 
       {reactivateCampaign && (
-        <div className="modal">
+        <div className="modal modal-top">
           <div className="modal-card wizard">
             <div className="modal-header">
               <div>
@@ -2594,6 +2605,24 @@ export default function ReviewPage() {
               </button>
               <button className="btn btn-primary" type="button" onClick={confirmReactivateCampaign}>
                 Reactivar campaña
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmModal.open && (
+        <div className="modal modal-top">
+          <div className="confirm-modal-card">
+            <div className="confirm-icon-wrap" style={{ background: confirmModal.danger ? 'var(--danger-bg, rgba(244,67,54,0.12))' : 'var(--warning-bg, rgba(255,176,32,0.16))' }}>
+              <AlertTriangle style={{ width: 28, height: 28, color: confirmModal.danger ? 'var(--danger-strong, #e0564e)' : 'var(--warning, #b36b00)' }} />
+            </div>
+            <h3 className="confirm-title">{confirmModal.title}</h3>
+            <p className="confirm-message">{confirmModal.message}</p>
+            <div className="confirm-actions">
+              <button className="btn btn-secondary" onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}>Cancelar</button>
+              <button className={`btn ${confirmModal.danger ? 'btn-danger' : 'btn-primary'}`} onClick={confirmModal.onConfirm}>
+                Confirmar
               </button>
             </div>
           </div>
@@ -3525,6 +3554,67 @@ export default function ReviewPage() {
           padding: 24px;
           z-index: 20;
           overflow: auto;
+        }
+        .modal-top {
+          z-index: 55;
+        }
+        .confirm-modal-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          padding: 28px 24px 20px;
+          max-width: 400px;
+          width: 100%;
+          text-align: center;
+          box-shadow: var(--shadow-strong);
+          animation: confirmPop 0.22s cubic-bezier(0.34,1.56,0.64,1);
+        }
+        @keyframes confirmPop {
+          0% { opacity: 0; transform: scale(0.9) translateY(10px); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .confirm-icon-wrap {
+          width: 52px;
+          height: 52px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 14px;
+        }
+        .confirm-title {
+          font-size: 1.05rem;
+          font-weight: 700;
+          color: var(--text-primary);
+          margin: 0 0 6px;
+        }
+        .confirm-message {
+          font-size: 0.88rem;
+          color: var(--text-muted);
+          margin: 0 0 20px;
+          line-height: 1.5;
+        }
+        .confirm-actions {
+          display: flex;
+          gap: 10px;
+          justify-content: center;
+        }
+        .confirm-actions .btn {
+          flex: 1;
+          max-width: 160px;
+        }
+        .btn-danger {
+          background: var(--danger-strong, #e0564e);
+          color: #fff;
+          border: none;
+          padding: 8px 18px;
+          border-radius: 8px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: opacity 0.15s;
+        }
+        .btn-danger:hover {
+          opacity: 0.85;
         }
         .wizard-modal {
           z-index: 60;
