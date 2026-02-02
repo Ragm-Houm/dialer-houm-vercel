@@ -21,35 +21,47 @@ export default async function handler(req, res) {
     const apiSecret = process.env.TWILIO_API_SECRET;
     const twimlAppSid = process.env.TWILIO_TWIML_APP_SID;
 
+    // Limpiar igual que lib/twilio.js
+    const cleanApiKey = apiKey?.trim().replace(/^["']|["']$/g, '');
+    const cleanAccountSid = accountSid?.trim().replace(/^["']|["']$/g, '');
+    const cleanAuthToken = authToken?.trim().replace(/^["']|["']$/g, '');
+    const cleanApiSecret = apiSecret?.trim().replace(/^["']|["']$/g, '');
+    const cleanTwimlAppSid = twimlAppSid?.trim().replace(/^["']|["']$/g, '');
+
     const results = {
       credentials: {
-        accountSid: accountSid ? accountSid.substring(0, 10) + '...' : 'MISSING',
-        apiKey: apiKey ? apiKey.substring(0, 10) + '...' : 'MISSING',
-        twimlAppSid: twimlAppSid ? twimlAppSid.substring(0, 10) + '...' : 'MISSING',
-        authTokenPresent: !!authToken,
-        apiSecretPresent: !!apiSecret
+        accountSid: cleanAccountSid ? cleanAccountSid.substring(0, 10) + '...' : 'MISSING',
+        apiKey: cleanApiKey ? cleanApiKey.substring(0, 10) + '...' : 'MISSING',
+        apiKeyLength: apiKey?.length,
+        apiKeyCleanLength: cleanApiKey?.length,
+        apiKeyHasWhitespace: apiKey !== cleanApiKey,
+        twimlAppSid: cleanTwimlAppSid ? cleanTwimlAppSid.substring(0, 10) + '...' : 'MISSING',
+        authTokenPresent: !!cleanAuthToken,
+        apiSecretPresent: !!cleanApiSecret,
+        apiSecretLength: apiSecret?.length,
+        apiSecretCleanLength: cleanApiSecret?.length
       }
     };
 
     // Verificar formato
-    if (accountSid && !accountSid.startsWith('AC')) {
+    if (cleanAccountSid && !cleanAccountSid.startsWith('AC')) {
       results.error = 'Account SID debe empezar con AC';
       return res.status(200).json(results);
     }
-    if (apiKey && !apiKey.startsWith('SK')) {
+    if (cleanApiKey && !cleanApiKey.startsWith('SK')) {
       results.error = 'API Key debe empezar con SK';
       return res.status(200).json(results);
     }
-    if (twimlAppSid && !twimlAppSid.startsWith('AP')) {
+    if (cleanTwimlAppSid && !cleanTwimlAppSid.startsWith('AP')) {
       results.error = 'TwiML App SID debe empezar con AP';
       return res.status(200).json(results);
     }
 
     // Verificar que API Key pertenece a la cuenta
     try {
-      const client = twilio(accountSid, authToken);
+      const client = twilio(cleanAccountSid, cleanAuthToken);
       const keys = await client.keys.list({ limit: 20 });
-      const keyExists = keys.find(k => k.sid === apiKey);
+      const keyExists = keys.find(k => k.sid === cleanApiKey);
 
       results.apiKeyValidation = keyExists ? 'API Key existe en la cuenta' : 'API Key NO existe en esta cuenta';
 
@@ -65,8 +77,8 @@ export default async function handler(req, res) {
 
     // Verificar TwiML App
     try {
-      const client = twilio(accountSid, authToken);
-      const app = await client.applications(twimlAppSid).fetch();
+      const client = twilio(cleanAccountSid, cleanAuthToken);
+      const app = await client.applications(cleanTwimlAppSid).fetch();
       results.twimlAppValidation = {
         exists: true,
         name: app.friendlyName,
@@ -85,14 +97,14 @@ export default async function handler(req, res) {
       const VoiceGrant = AccessToken.VoiceGrant;
 
       const token = new AccessToken(
-        accountSid,
-        apiKey,
-        apiSecret,
+        cleanAccountSid,
+        cleanApiKey,
+        cleanApiSecret,
         { identity: 'test_user', ttl: 3600 }
       );
 
       const voiceGrant = new VoiceGrant({
-        outgoingApplicationSid: twimlAppSid,
+        outgoingApplicationSid: cleanTwimlAppSid,
         incomingAllow: true
       });
 
