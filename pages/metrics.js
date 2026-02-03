@@ -17,6 +17,8 @@ export default function MetricsPage() {
   const [campaigns, setCampaigns] = useState([]);
   const [users, setUsers] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [syncStatus, setSyncStatus] = useState('idle');
+  const [lastSyncAt, setLastSyncAt] = useState(null);
   const [execCampaignFilter, setExecCampaignFilter] = useState('all');
   const [rankMetric, setRankMetric] = useState('contactRate');
   const [datePreset, setDatePreset] = useState('7d');
@@ -138,6 +140,7 @@ export default function MetricsPage() {
 
   const loadMetrics = async (userEmail) => {
     try {
+      setSyncStatus('loading');
       setLoading(true);
       const res = await csrfFetch(
         `/api/metrics-campaigns?email=${encodeURIComponent(userEmail)}&dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`,
@@ -161,9 +164,12 @@ export default function MetricsPage() {
           activeSeconds: 0
         }
       );
+      setLastSyncAt(new Date());
+      setSyncStatus('ok');
     } catch (error) {
       console.error('Error cargando metricas:', error);
       setAuthError('Error cargando metricas');
+      setSyncStatus('error');
     } finally {
       setLoading(false);
     }
@@ -202,6 +208,16 @@ export default function MetricsPage() {
     return `${rem}m`;
   };
 
+  const formatSync = (date) => {
+    if (!date) return 'Sin sincronizar';
+    const diff = Math.max(0, Date.now() - date.getTime());
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Hace unos segundos';
+    if (mins < 60) return `Hace ${mins} min`;
+    const hrs = Math.floor(mins / 60);
+    return `Hace ${hrs}h ${mins % 60}m`;
+  };
+
   const applyDatePreset = (preset) => {
     const today = new Date();
     const end = today.toISOString().slice(0, 10);
@@ -235,7 +251,7 @@ export default function MetricsPage() {
   return (
     <>
       <Head>
-        <title>Metricas de Campanas</title>
+        <title>Métricas de campañas</title>
       </Head>
 
       <style jsx global>{`
@@ -308,6 +324,36 @@ export default function MetricsPage() {
           background: var(--surface-soft-2);
           font-size: 12px;
           font-weight: 700;
+        }
+        .sync-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .sync-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(255, 255, 255, 0.2);
+        }
+        .sync-dot::after {
+          content: '';
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--text-muted);
+        }
+        .sync-dot.ok::after {
+          background: #22c55e;
+        }
+        .sync-dot.loading::after {
+          background: #f59e0b;
+        }
+        .sync-dot.error::after {
+          background: #ef4444;
         }
         .card {
           background: var(--surface);
@@ -592,14 +638,16 @@ export default function MetricsPage() {
           {sessionStarted && <AppHeader email={email} role={role} picture={session?.picture} onLogout={handleLogout} />}
           <div className="header">
             <div className="title">
-              <h1>Metricas de campanas</h1>
-              <p>Resumen operativo por campana y por ejecutivo</p>
+              <h1>Métricas de campañas</h1>
+              <p>Resumen del rendimiento por campaña y por ejecutivo.</p>
             </div>
             {sessionStarted && (
               <div className="session">
-                <div className="chip">
-                  {email} · {role}
-                </div>
+                <span className="chip sync-chip">
+                  <span className={`sync-dot ${syncStatus}`} />
+                  {syncStatus === 'loading' ? 'Sincronizando...' : formatSync(lastSyncAt)}
+                </span>
+                <div className="chip">{email} · {role}</div>
               </div>
             )}
           </div>
@@ -649,6 +697,9 @@ export default function MetricsPage() {
                   Actualizar
                 </button>
               </div>
+              <div className="label" style={{ textTransform: 'none' }}>
+                Los indicadores se calculan con el rango seleccionado.
+              </div>
             </div>
           )}
 
@@ -668,28 +719,28 @@ export default function MetricsPage() {
           ) : (
             <>
               <div className="summary">
-                <div className="card">
-                  <div className="label">Campañas</div>
+                <div className="card" title="Número de campañas activas en el rango seleccionado.">
+                  <div className="label">Campañas activas</div>
                   <div className="metric-value">{totals.campaigns}</div>
                 </div>
-                <div className="card">
+                <div className="card" title="Total de llamadas iniciadas dentro del rango.">
                   <div className="label">Llamadas realizadas</div>
                   <div className="metric-value">{totals.calls}</div>
                 </div>
-                <div className="card">
-                  <div className="label">Leads completados</div>
+                <div className="card" title="Leads con resultado guardado (gestión completada).">
+                  <div className="label">Leads gestionados</div>
                   <div className="metric-value">{totals.leadsCompleted}</div>
                 </div>
-                <div className="card">
+                <div className="card" title="Leads avanzados sin llamada, con razón registrada.">
                   <div className="label">Leads saltados</div>
                   <div className="metric-value">{totals.leadsSkipped}</div>
                 </div>
-                <div className="card">
-                  <div className="label">Tiempo en llamadas</div>
+                <div className="card" title="Tiempo total en llamadas dentro del rango.">
+                  <div className="label">Tiempo en llamada</div>
                   <div className="metric-value">{formatDuration(totals.callSeconds)}</div>
                 </div>
-                <div className="card">
-                  <div className="label">Tiempo en campaña</div>
+                <div className="card" title="Tiempo total activo en campañas dentro del rango.">
+                  <div className="label">Tiempo activo</div>
                   <div className="metric-value">{formatDuration(totals.activeSeconds)}</div>
                 </div>
               </div>
@@ -704,7 +755,7 @@ export default function MetricsPage() {
               {!loading && campaigns.length === 0 && (
                 <div className="card empty">
                   <ShieldAlert />
-                  Aun no hay datos de campanas.
+                  Aún no hay datos de campañas.
                 </div>
               )}
 
@@ -712,27 +763,27 @@ export default function MetricsPage() {
                 <div className="grid">
                   <div className="card">
                     <div className="label" style={{ marginBottom: 10 }}>
-                      <BarChart3 size={14} style={{ marginRight: 6 }} /> Top campanas
+                      <BarChart3 size={14} style={{ marginRight: 6 }} /> Campañas con mayor actividad
                     </div>
                     <div className="campaign-list">
                       {topCampaigns.map((c) => (
                         <div key={c.campaignKey} className="campaign-item">
                           <div className="campaign-title">
-                            {c.country} · pipeline {c.pipelineId} · stage {c.stageId}
+                            {c.name || `${c.country} · ${c.stageName || `Etapa ${c.stageId}`}`}
                           </div>
                           <div className="campaign-meta">
-                            <span>Pendientes: {c.totals.pending}</span>
-                            <span>Locks: {c.totals.locked}</span>
-                            <span>Llamadas: {c.totals.calls}</span>
-                            <span>Completados: {c.totals.leadsCompleted}</span>
-                            <span>Saltos: {c.totals.leadsSkipped}</span>
-                            <span>🟢 Contacto efectivo: {getBucketGroup(c.totals.buckets, 'contacto_efectivo', 'interesado', 'contactado')}</span>
-                            <span>🏆 Conversión: {getBucketGroup(c.totals.buckets, 'conversion', 'agendado', 'publicada', 'reservada', 'arrendada')}</span>
-                            <span>📵 Sin contacto: {getBucketGroup(c.totals.buckets, 'no_contacto', 'no_contesta')}</span>
-                            <span>🔄 Seguimiento: {getBucketGroup(c.totals.buckets, 'seguimiento', 'futuro')}</span>
-                            <span>🚫 Descarte: {getBucketGroup(c.totals.buckets, 'descarte', 'perdido', 'falso', 'caro')}</span>
-                            <span>
-                              Contact rate:{' '}
+                            <span title="Leads pendientes por gestionar en la campaña.">Pendientes: {c.totals.pending}</span>
+                            <span title="Leads actualmente bloqueados/en cola por otro ejecutivo.">En cola: {c.totals.locked}</span>
+                            <span title="Llamadas realizadas en la campaña.">Llamadas: {c.totals.calls}</span>
+                            <span title="Leads gestionados con resultado final.">Gestionados: {c.totals.leadsCompleted}</span>
+                            <span title="Leads saltados con razón registrada.">Saltos: {c.totals.leadsSkipped}</span>
+                            <span title="Leads con contacto efectivo.">🟢 Contactados: {getBucketGroup(c.totals.buckets, 'contacto_efectivo', 'interesado', 'contactado')}</span>
+                            <span title="Resultados positivos (agenda/cierre).">🏆 Cierres positivos: {getBucketGroup(c.totals.buckets, 'conversion', 'agendado', 'publicada', 'reservada', 'arrendada')}</span>
+                            <span title="Intentos sin contacto (no contesta).">📵 No contestan: {getBucketGroup(c.totals.buckets, 'no_contacto', 'no_contesta')}</span>
+                            <span title="Leads con seguimiento futuro asignado.">🔄 Seguimiento futuro: {getBucketGroup(c.totals.buckets, 'seguimiento', 'futuro')}</span>
+                            <span title="Leads descartados definitivamente.">🚫 Descartes: {getBucketGroup(c.totals.buckets, 'descarte', 'perdido', 'falso', 'caro')}</span>
+                            <span title="Contactados / llamadas realizadas.">
+                              Tasa de contacto:{' '}
                               {(() => {
                                 const contacted = getBucketGroup(c.totals.buckets,
                                   'contacto_efectivo', 'conversion', 'interesado', 'agendado', 'publicada', 'reservada', 'arrendada', 'contactado');
@@ -758,7 +809,7 @@ export default function MetricsPage() {
 
                   <div className="card">
                     <div className="label" style={{ marginBottom: 10 }}>
-                      <Users size={14} style={{ marginRight: 6 }} /> Ejecutivos
+                      <Users size={14} style={{ marginRight: 6 }} /> Ejecutivos (rendimiento)
                     </div>
                     <div style={{ marginBottom: 10 }}>
                       <select
@@ -769,7 +820,7 @@ export default function MetricsPage() {
                         <option value="all">Todas las campañas</option>
                         {campaigns.map((campaign) => (
                           <option key={campaign.campaignKey} value={campaign.campaignKey}>
-                            {campaign.country} · {campaign.pipelineId}-{campaign.stageId}
+                            {campaign.name || `${campaign.country} · ${campaign.stageName || `Etapa ${campaign.stageId}`}`}
                           </option>
                         ))}
                       </select>
@@ -782,12 +833,12 @@ export default function MetricsPage() {
                         <div key={`${exec.email}-${exec.leadsCompleted}-${exec.calls}`} className="exec-item">
                           <div className="exec-email">{exec.email}</div>
                           <div className="exec-stats">
-                            <span>Calls: {exec.calls}</span>
-                            <span>Leads: {exec.leadsCompleted}</span>
+                            <span>Llamadas: {exec.calls}</span>
+                            <span>Leads gestionados: {exec.leadsCompleted}</span>
                             <span>Saltos: {exec.leadsSkipped}</span>
-                            <span>Tiempo: {formatDuration(exec.callSeconds)}</span>
+                            <span>Tiempo en llamada: {formatDuration(exec.callSeconds)}</span>
                             <span>
-                              Contacto:{' '}
+                              Tasa de contacto:{' '}
                               {(() => {
                                 const contacted = getBucketGroup(exec.buckets,
                                   'contacto_efectivo', 'conversion', 'interesado', 'agendado', 'publicada', 'reservada', 'arrendada', 'contactado');
@@ -825,10 +876,10 @@ export default function MetricsPage() {
                       value={rankMetric}
                       onChange={(event) => setRankMetric(event.target.value)}
                     >
-                      <option value="contactRate">Contact rate</option>
+                      <option value="contactRate">Tasa de contacto</option>
                       <option value="callsPerHour">Llamadas por hora</option>
-                      <option value="leadsCompleted">Leads completados</option>
-                      <option value="talkRatio">Tiempo en llamada</option>
+                      <option value="leadsCompleted">Leads gestionados</option>
+                      <option value="talkRatio">Porcentaje en llamada</option>
                       <option value="skipRate">Menor tasa de saltos</option>
                     </select>
                   </div>
@@ -839,7 +890,7 @@ export default function MetricsPage() {
                         <div>
                           <div className="rank-name">{user.email}</div>
                           <div className="rank-meta">
-                            Leads: {user.leadsCompleted} · Calls: {user.calls} · Tiempo:{' '}
+                            Leads: {user.leadsCompleted} · Llamadas: {user.calls} · Tiempo:{' '}
                             {formatDuration(user.callSeconds)}
                           </div>
                         </div>

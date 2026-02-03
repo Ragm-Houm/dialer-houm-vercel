@@ -90,6 +90,11 @@ export default function AppHeader({ email, role, picture, onLogout, audioConfig,
   }, [onMenuReady]);
 
   useEffect(() => {
+    if (!audioConfig?.onMenuOpen) return;
+    audioConfig.onMenuOpen(menuOpen);
+  }, [menuOpen, audioConfig]);
+
+  useEffect(() => {
     if (!window.matchMedia) {
       document.body.setAttribute('data-theme', 'dark');
       setTheme('dark');

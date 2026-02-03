@@ -1,10 +1,11 @@
 const {
   listCampaignDeals,
-  listPhoneReviews,
+  listCampaigns,
   listCampaignEvents,
   listCampaignSessions,
   listCallOutcomes
 } = require('../../lib/supabase');
+const { listStages } = require('../../lib/pipedrive');
 const { requireUser } = require('../../lib/auth');
 const { getCredentials } = require('../../lib/session-cookie');
 const { buildCampaignKey } = require('../../lib/review');
@@ -16,6 +17,8 @@ function initCampaign(acc, key, base) {
       country: base.country || 'N/A',
       pipelineId: base.pipelineId || null,
       stageId: base.stageId || null,
+      stageName: base.stageName || null,
+      name: base.name || null,
       totals: {
         deals: 0,
         done: 0,
@@ -111,12 +114,12 @@ export default async function handler(req, res) {
       return res.status(auth.status).json({ error: auth.error });
     }
 
-    const [campaignDeals, phoneReviews, campaignEvents, campaignSessions, outcomeDefs] = await Promise.all([
+    const [campaignDeals, campaignEvents, campaignSessions, outcomeDefs, campaignMeta] = await Promise.all([
       listCampaignDeals(2500),
-      listPhoneReviews(5000),
       listCampaignEvents(6000),
       listCampaignSessions(3000),
-      listCallOutcomes()
+      listCallOutcomes(),
+      listCampaigns()
     ]);
 
     const campaignsMap = {};
@@ -148,7 +151,8 @@ export default async function handler(req, res) {
       const campaign = initCampaign(campaignsMap, key, {
         country: row.country,
         pipelineId: row.pipeline_id,
-        stageId: row.stage_id
+        stageId: row.stage_id,
+        stageName: row.stage_name || null
       });
 
       campaign.totals.deals += 1;
@@ -159,26 +163,22 @@ export default async function handler(req, res) {
       if (row.status === 'done') bumpExecutive(campaign, row.assigned_to, 'dealsDone');
     });
 
-  phoneReviews.forEach((row) => {
-    const key = buildCampaignKey(row.country, row.pipeline_id, row.stage_id);
-    const campaign = initCampaign(campaignsMap, key, {
-      country: row.country,
-      pipelineId: row.pipeline_id,
-      stageId: row.stage_id
+    (campaignMeta || []).forEach((meta) => {
+      if (!meta || !meta.campaign_key) return;
+      const key = meta.campaign_key;
+      const campaign = initCampaign(campaignsMap, key, {
+        country: meta.country,
+        pipelineId: meta.pipeline_id,
+        stageId: meta.stage_id,
+        stageName: meta.stage_name || null,
+        name: meta.name || null
+      });
+      if (!campaign.name) campaign.name = meta.name || null;
+      if (!campaign.stageName) campaign.stageName = meta.stage_name || null;
+      if (!campaign.pipelineId) campaign.pipelineId = meta.pipeline_id || null;
+      if (!campaign.stageId) campaign.stageId = meta.stage_id || null;
+      if (!campaign.country || campaign.country === 'N/A') campaign.country = meta.country || campaign.country;
     });
-
-    campaign.totals.reviewed += 1;
-    if (row.skipped) campaign.totals.skipped += 1;
-    if (row.selected_primary || row.selected_secondary) campaign.totals.withSelection += 1;
-
-    bumpExecutive(campaign, row.reviewed_by, 'reviewed');
-    if (row.skipped) bumpExecutive(campaign, row.reviewed_by, 'skipped');
-    if (row.selected_primary || row.selected_secondary) bumpExecutive(campaign, row.reviewed_by, 'withSelection');
-
-    bumpUser(usersMap, row.reviewed_by, 'reviewed');
-    if (row.skipped) bumpUser(usersMap, row.reviewed_by, 'skipped');
-    if (row.selected_primary || row.selected_secondary) bumpUser(usersMap, row.reviewed_by, 'withSelection');
-  });
 
     campaignEvents.forEach((event) => {
       if (!inRange(event.created_at)) return;
@@ -226,6 +226,11 @@ export default async function handler(req, res) {
         bumpExecutive(campaign, event.user_email, 'leadsDeferred');
         bumpUser(usersMap, event.user_email, 'leadsDeferred');
       }
+    });
+
+    // Derivados desde eventos (ya no usamos phone_review)
+    Object.values(campaignsMap).forEach((campaign) => {
+      campaign.totals.reviewed = (campaign.totals.leadsCompleted || 0) + (campaign.totals.leadsSkipped || 0);
     });
 
     campaignSessions.forEach((session) => {
@@ -296,6 +301,47 @@ export default async function handler(req, res) {
         executives: Object.values(c.executives).sort((a, b) => b.reviewed - a.reviewed)
       }))
       .sort((a, b) => b.totals.reviewed - a.totals.reviewed);
+
+    const pipelineIds = Array.from(
+      new Set(
+        campaigns
+          .map((c) => c.pipelineId)
+          .filter((id) => id !== null && id !== undefined)
+          .map((id) => String(id))
+      )
+    );
+    const stagesByPipeline = {};
+    for (const pipelineId of pipelineIds) {
+      try {
+        const stages = await listStages(pipelineId);
+        stagesByPipeline[pipelineId] = (stages || []).reduce((acc, stage) => {
+          acc[String(stage.id)] = stage.name;
+          return acc;
+        }, {});
+      } catch (error) {
+        console.error('Error cargando stages para metrics:', error.message);
+      }
+    }
+    campaigns.forEach((campaign) => {
+      if (!campaign.stageName && campaign.pipelineId && campaign.stageId) {
+        const map = stagesByPipeline[String(campaign.pipelineId)] || {};
+        campaign.stageName = map[String(campaign.stageId)] || campaign.stageName;
+      }
+    });
+
+    const fallbackStageNames = {
+      '59': { '590': 'No contesta' },
+      '60': { '605': 'No contesta' },
+      '61': { '620': 'No contesta' }
+    };
+    campaigns.forEach((campaign) => {
+      if (!campaign.stageName && campaign.pipelineId && campaign.stageId) {
+        const map = fallbackStageNames[String(campaign.pipelineId)] || {};
+        if (map[String(campaign.stageId)]) {
+          campaign.stageName = map[String(campaign.stageId)];
+        }
+      }
+    });
 
     res.status(200).json({
       ok: true,

@@ -26,7 +26,7 @@ function getDefaultActionConfig(category) {
         log_pipedrive: true,
         mark_lost: false,
         require_lost_reason: false,
-        create_followup: false,
+        create_followup: true,
         mark_done: true,
         allow_retry: false,
         require_retry_time: false,

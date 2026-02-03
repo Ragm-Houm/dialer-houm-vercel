@@ -1,6 +1,10 @@
 const { getDealContext } = require('../../lib/pipedrive');
 
-const PIPEDRIVE_DOMAIN = process.env.PIPEDRIVE_DOMAIN || '';
+const RAW_DOMAIN = process.env.PIPEDRIVE_DOMAIN || '';
+const PIPEDRIVE_DOMAIN = RAW_DOMAIN
+  .replace(/^https?:\/\//, '')
+  .replace(/\/.*$/, '')
+  .replace(/\.pipedrive\.com$/i, '');
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {

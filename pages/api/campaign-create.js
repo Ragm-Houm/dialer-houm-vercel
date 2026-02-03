@@ -48,17 +48,41 @@ function extractOwnerId(deal) {
  
 function getDealLabels(deal) {
   if (!deal) return [];
-  const value = deal.label;
-  if (value === null || value === undefined || value === '') return [];
-  if (typeof value === 'number') return [String(value)];
-  return String(value)
+  const raw =
+    deal.label !== undefined
+      ? deal.label
+      : deal.label_ids !== undefined
+      ? deal.label_ids
+      : deal.labels !== undefined
+      ? deal.labels
+      : null;
+  if (raw === null || raw === undefined || raw === '') return [];
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) => {
+        if (item === null || item === undefined) return null;
+        if (typeof item === 'number' || typeof item === 'string') return String(item);
+        if (typeof item === 'object') {
+          if (item.id !== undefined && item.id !== null) return String(item.id);
+          if (item.value !== undefined && item.value !== null) return String(item.value);
+        }
+        return String(item);
+      })
+      .filter(Boolean);
+  }
+  if (typeof raw === 'object') {
+    if (raw.id !== undefined && raw.id !== null) return [String(raw.id)];
+    if (raw.value !== undefined && raw.value !== null) return [String(raw.value)];
+  }
+  if (typeof raw === 'number') return [String(raw)];
+  return String(raw)
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
 }
 
 
-function matchesAgeFilter(ageDays, filter) {
+function matchesAgeFilterSingle(ageDays, filter) {
   if (ageDays === null) return false;
   switch (filter) {
     case 'all':
@@ -74,6 +98,16 @@ function matchesAgeFilter(ageDays, filter) {
     default:
       return true;
   }
+}
+
+function matchesAgeFilter(ageDays, filter) {
+  const filters = Array.isArray(filter)
+    ? filter.filter(Boolean)
+    : typeof filter === 'string' && filter.length > 0
+    ? [filter]
+    : ['all'];
+  if (filters.includes('all')) return matchesAgeFilterSingle(ageDays, 'all');
+  return filters.some((item) => matchesAgeFilterSingle(ageDays, item));
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -321,7 +355,7 @@ export default async function handler(req, res) {
       pipeline_id: pipelineId,
       stage_id: stageId,
       stage_name: safeStageName,
-      age_filter: ageFilter || null,
+      age_filter: Array.isArray(ageFilter) ? ageFilter.join(',') : ageFilter || null,
       close_at: noTimeLimit ? null : closeAt || null,
       close_tz: noTimeLimit ? null : closeTz || null,
       no_time_limit: Boolean(noTimeLimit),

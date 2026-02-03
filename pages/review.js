@@ -355,14 +355,14 @@ export default function ReviewPage() {
   const [wizardOwnerOptions, setWizardOwnerOptions] = useState([]);
   const [wizardSelectedOwners, setWizardSelectedOwners] = useState([]);
   const [wizardOwnersLoading, setWizardOwnersLoading] = useState(false);
-  const [wizardLabelInclude, setWizardLabelInclude] = useState(['156']);
+  const [wizardLabelInclude, setWizardLabelInclude] = useState([]);
   const [wizardLabelExclude, setWizardLabelExclude] = useState([]);
   const [wizardPreviewLoading, setWizardPreviewLoading] = useState(false);
   const [wizardPreview, setWizardPreview] = useState(null);
   const [wizardProgress, setWizardProgress] = useState(0);
   const [wizardPreviewStatus, setWizardPreviewStatus] = useState('');
   const [wizardPreviewError, setWizardPreviewError] = useState('');
-  const [wizardAgeFilter, setWizardAgeFilter] = useState('lt7');
+  const [wizardAgeFilter, setWizardAgeFilter] = useState(['lt7']);
   const [wizardImpactNote, setWizardImpactNote] = useState('');
   const [wizardNoTimeLimit, setWizardNoTimeLimit] = useState(false);
   const [wizardClosePreset, setWizardClosePreset] = useState('2h');
@@ -450,9 +450,15 @@ export default function ReviewPage() {
       setWizardStageName(saved.stageName || '');
       setWizardOwnerMode(saved.ownerMode || 'all');
       setWizardSelectedOwners(saved.selectedOwners || []);
-      setWizardLabelInclude(saved.labelInclude || ['156']);
+      setWizardLabelInclude(saved.labelInclude || []);
       setWizardLabelExclude(saved.labelExclude || []);
-      setWizardAgeFilter(saved.ageFilter || 'lt7');
+      if (Array.isArray(saved.ageFilter)) {
+        setWizardAgeFilter(saved.ageFilter);
+      } else if (saved.ageFilter) {
+        setWizardAgeFilter([saved.ageFilter]);
+      } else {
+        setWizardAgeFilter(['lt7']);
+      }
       setWizardNoTimeLimit(Boolean(saved.noTimeLimit));
       setWizardClosePreset(saved.closePreset || '2h');
       setWizardAllowAllExecs(saved.allowAllExecs !== false);
@@ -717,29 +723,40 @@ export default function ReviewPage() {
     loadWizardStages(wizardCountry);
   }, [wizardCountry, wizardSource]);
 
+  const resetWizardPreview = () => {
+    setWizardPreview(null);
+    setWizardPreviewError('');
+    setWizardPreviewStatus('');
+    setWizardProgress(0);
+    if (typeof window !== 'undefined' && wizardStorageKey) {
+      try {
+        sessionStorage.removeItem(wizardStorageKey);
+      } catch (error) {
+        console.warn('No se pudo limpiar el borrador del wizard:', error.message);
+      }
+    }
+  };
+
   useEffect(() => {
     if (wizardSource !== 'manual') return;
     setWizardFileName('');
     setWizardFileRows([]);
     setWizardFileError('');
-    setWizardPreview(null);
+    resetWizardPreview();
   }, [wizardCountry, wizardSource]);
 
   useEffect(() => {
     if (!wizardOpen) return;
     setWizardStageId('');
     setWizardStageName('');
-    setWizardPreview(null);
-    setWizardPreviewError('');
-    setWizardPreviewStatus('');
-    setWizardProgress(0);
+    resetWizardPreview();
     if (wizardSource === 'manual') {
       setWizardOwnerMode('all');
       setWizardSelectedOwners([]);
       setWizardStages([]);
     }
     if (wizardSource === 'auto') {
-      setWizardLabelInclude(['156']);
+      setWizardLabelInclude([]);
       setWizardLabelExclude([]);
     }
   }, [wizardSource, wizardOpen]);
@@ -871,24 +888,57 @@ export default function ReviewPage() {
     ];
   }, [wizardPreview]);
 
+  const normalizeAgeFilters = (value) => {
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (typeof value === 'string' && value.length > 0) return [value];
+    return ['all'];
+  };
+
+  const ageFiltersSelected = useMemo(() => normalizeAgeFilters(wizardAgeFilter), [wizardAgeFilter]);
+
+  const toggleAgeFilter = (filterValue) => {
+    const current = new Set(ageFiltersSelected);
+    if (filterValue === 'all') {
+      setWizardAgeFilter(['all']);
+      return;
+    }
+    current.delete('all');
+    if (current.has(filterValue)) {
+      current.delete(filterValue);
+    } else {
+      current.add(filterValue);
+    }
+    const values = Array.from(current);
+    if (values.length === 0) {
+      setWizardAgeFilter([filterValue]);
+      return;
+    }
+    const allSpecific = ['lt7', 'between7_15', 'between15_30', 'gt30'];
+    const hasAllSpecific = allSpecific.every((item) => values.includes(item));
+    setWizardAgeFilter(hasAllSpecific ? ['all'] : values);
+  };
+
   const wizardImpactCount = useMemo(() => {
     if (!wizardPreview?.ageBuckets) return 0;
     const buckets = wizardPreview.ageBuckets;
-    switch (wizardAgeFilter) {
-      case 'all':
-        return wizardPreview.total || 0;
-      case 'lt7':
-        return buckets.lt7 || 0;
-      case 'between7_15':
-        return buckets.between7_15 || 0;
-      case 'between15_30':
-        return buckets.between15_30 || 0;
-      case 'gt30':
-        return buckets.gt30 || 0;
-      default:
-        return 0;
+    if (ageFiltersSelected.includes('all')) {
+      return wizardPreview.total || 0;
     }
-  }, [wizardAgeFilter, wizardPreview]);
+    return ageFiltersSelected.reduce((sum, filter) => {
+      switch (filter) {
+        case 'lt7':
+          return sum + (buckets.lt7 || 0);
+        case 'between7_15':
+          return sum + (buckets.between7_15 || 0);
+        case 'between15_30':
+          return sum + (buckets.between15_30 || 0);
+        case 'gt30':
+          return sum + (buckets.gt30 || 0);
+        default:
+          return sum;
+      }
+    }, 0);
+  }, [wizardPreview, ageFiltersSelected]);
 
   const campaignNamePreview = useMemo(() => {
     if (!wizardCountry) return '';
@@ -903,14 +953,31 @@ export default function ReviewPage() {
       setWizardImpactNote('');
       return;
     }
-    const label = AGE_FILTERS.find((filter) => filter.value === wizardAgeFilter)?.label || '';
+    const label =
+      ageFiltersSelected.includes('all')
+        ? 'Todos'
+        : ageFiltersSelected
+            .map((value) => AGE_FILTERS.find((filter) => filter.value === value)?.label || value)
+            .join(' + ');
     setWizardImpactNote(`Campaña para: <span class="impact-count">${wizardImpactCount}</span> leads (${label}).`);
-  }, [wizardAgeFilter, wizardPreview, wizardImpactCount]);
+  }, [wizardPreview, wizardImpactCount, ageFiltersSelected]);
 
   useEffect(() => {
     if (!wizardOpen || wizardStep < 3) return;
     loadWizardPreview();
-  }, [wizardOpen, wizardStep, wizardCountry, wizardStageId, email, wizardSource, wizardFileRows]);
+  }, [
+    wizardOpen,
+    wizardStep,
+    wizardCountry,
+    wizardStageId,
+    email,
+    wizardSource,
+    wizardFileRows,
+    wizardOwnerMode,
+    wizardSelectedOwners,
+    wizardLabelInclude,
+    wizardLabelExclude
+  ]);
 
   useEffect(() => {
     if (!wizardPreviewLoading) return;
@@ -959,8 +1026,7 @@ export default function ReviewPage() {
     setWizardStageId(value);
     const match = wizardStages.find((stage) => String(stage.id) === String(value));
     setWizardStageName(match ? match.name : '');
-    setWizardPreview(null);
-    setWizardProgress(0);
+    resetWizardPreview();
   };
 
   const resetWizard = () => {
@@ -977,7 +1043,7 @@ export default function ReviewPage() {
     setWizardPreviewError('');
     setWizardProgress(0);
     setWizardPreviewStatus('');
-    setWizardAgeFilter('lt7');
+    setWizardAgeFilter(['lt7']);
     setWizardNoTimeLimit(false);
     setWizardClosePreset('2h');
     setWizardAllowAllExecs(true);
@@ -987,7 +1053,7 @@ export default function ReviewPage() {
     setWizardOwnerMode('all');
     setWizardOwnerOptions([]);
     setWizardSelectedOwners([]);
-    setWizardLabelInclude(['156']);
+    setWizardLabelInclude([]);
     setWizardLabelExclude([]);
     setCreateError('');
     setWizardCreateProgress(0);
@@ -2012,8 +2078,7 @@ export default function ReviewPage() {
                       className={`flag-btn ${wizardCountry === option.value ? 'active' : ''}`}
                       onClick={() => {
                         setWizardCountry(option.value);
-                        setWizardPreview(null);
-                        setWizardProgress(0);
+                        resetWizardPreview();
                       }}
                     >
                       <span className="flag-icon">{option.flag}</span>
@@ -2026,14 +2091,20 @@ export default function ReviewPage() {
 
             {wizardStep === 2 && (
               <div className="wizard-section">
-                <h3>Selecciona origen de campaña</h3>
+                <h3>Define la fuente y filtros</h3>
+                <div className="impact-note">
+                  Define de dónde salen los leads y los filtros que aplicarán. Al pasar al paso 3 se recalcula el resumen.
+                </div>
                 <div className="source-toggle">
                   {MANUAL_SOURCE_OPTIONS.map((option) => (
                     <button
                       key={option.value}
                       type="button"
                       className={`source-chip ${wizardSource === option.value ? 'active' : ''}`}
-                      onClick={() => setWizardSource(option.value)}
+                      onClick={() => {
+                        setWizardSource(option.value);
+                        resetWizardPreview();
+                      }}
                     >
                       {option.label}
                     </button>
@@ -2055,7 +2126,7 @@ export default function ReviewPage() {
                       </button>
                     </div>
                     <div
-                      className="upload-drop"
+                      className={`upload-drop ${wizardFileLoading ? 'is-loading' : ''} ${wizardFileError ? 'has-error' : ''} ${wizardFileRows.length > 0 ? 'is-ready' : ''}`}
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={(event) => {
                         event.preventDefault();
@@ -2069,19 +2140,44 @@ export default function ReviewPage() {
                         onChange={(event) => loadManualFile(event.target.files?.[0])}
                       />
                       <div>
-                        <strong>Arrastra tu CSV o Excel</strong>
-                        <div className="upload-sub">o haz clic para seleccionar el archivo</div>
+                        <strong>
+                          {wizardFileRows.length > 0 ? 'Archivo cargado' : 'Arrastra tu CSV o Excel'}
+                        </strong>
+                        <div className="upload-sub">
+                          {wizardFileName ? `Seleccionado: ${wizardFileName}` : 'o haz clic para seleccionar el archivo'}
+                        </div>
                       </div>
                     </div>
                     <div className="upload-hint">
                       Columnas requeridas: pipeline_id, stage_id, stage_name, deal_id, deal_title, phone_primary,
                       phone_secondary, add_time
                     </div>
-                    {wizardFileName && (
-                      <div className="upload-meta">Archivo cargado: {wizardFileName}</div>
-                    )}
-                    {wizardFileLoading && <div className="impact-note">Procesando archivo...</div>}
-                    {wizardFileError && <div className="impact-note">{wizardFileError}</div>}
+                    <div className="upload-status">
+                      {wizardFileLoading && (
+                        <div className="status-pill loading">
+                          <Loader2 className="icon-sm spin" />
+                          Procesando archivo…
+                        </div>
+                      )}
+                      {!wizardFileLoading && wizardFileError && (
+                        <div className="status-pill error">
+                          <AlertTriangle className="icon-sm" />
+                          {wizardFileError}
+                        </div>
+                      )}
+                      {!wizardFileLoading && !wizardFileError && wizardFileRows.length > 0 && (
+                        <div className="status-pill success">
+                          <CheckCircle2 className="icon-sm" />
+                          Listo · {wizardFileRows.length} filas
+                        </div>
+                      )}
+                      {!wizardFileLoading && !wizardFileError && wizardFileRows.length === 0 && (
+                        <div className="status-pill idle">
+                          <FileText className="icon-sm" />
+                          Sin archivo cargado
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -2103,7 +2199,7 @@ export default function ReviewPage() {
                             } else {
                               setWizardSelectedOwners([]);
                             }
-                            setWizardPreview(null);
+                            resetWizardPreview();
                           }}
                         />
                         <span className="slider" />
@@ -2119,13 +2215,14 @@ export default function ReviewPage() {
                               type="checkbox"
                               checked={wizardSelectedOwners.includes(owner.id)}
                               onChange={(event) => {
-                                if (event.target.checked) {
-                                  setWizardSelectedOwners((prev) => [...prev, owner.id]);
-                                } else {
-                                  setWizardSelectedOwners((prev) => prev.filter((item) => item !== owner.id));
-                                }
-                              }}
-                            />
+                              if (event.target.checked) {
+                                setWizardSelectedOwners((prev) => [...prev, owner.id]);
+                              } else {
+                                setWizardSelectedOwners((prev) => prev.filter((item) => item !== owner.id));
+                              }
+                              resetWizardPreview();
+                            }}
+                          />
                             <span>{owner.name}</span>
                           </label>
                         ))}
@@ -2134,8 +2231,8 @@ export default function ReviewPage() {
                     <div className="divider" />
                     <h3>Etiquetas a incluir (Pipedrive)</h3>
                     <div className="hint">
-                      Selecciona las etiquetas que quieres incluir. Si solo seleccionas <strong>RENTAL</strong>,
-                      se filtran negocios con etiqueta única RENTAL.
+                      Selecciona las etiquetas que quieres incluir. Si no seleccionas ninguna, se incluyen todas.
+                      Si solo seleccionas <strong>RENTAL</strong>, se filtran negocios con etiqueta única RENTAL.
                     </div>
                     <div className="label-grid">
                       {LABEL_OPTIONS.map((option) => (
@@ -2149,7 +2246,7 @@ export default function ReviewPage() {
                               } else {
                                 setWizardLabelInclude((prev) => prev.filter((item) => item !== option.id));
                               }
-                              setWizardPreview(null);
+                              resetWizardPreview();
                             }}
                           />
                           <span>{option.label}</span>
@@ -2171,7 +2268,7 @@ export default function ReviewPage() {
                               } else {
                                 setWizardLabelExclude((prev) => prev.filter((item) => item !== option.id));
                               }
-                              setWizardPreview(null);
+                              resetWizardPreview();
                             }}
                           />
                           <span>{option.label}</span>
@@ -2216,8 +2313,8 @@ export default function ReviewPage() {
                     <button
                       key={filter.value}
                       type="button"
-                      className={`age-chip ${wizardAgeFilter === filter.value ? 'active' : ''}`}
-                      onClick={() => setWizardAgeFilter(filter.value)}
+                      className={`age-chip ${ageFiltersSelected.includes('all') ? filter.value === 'all' : ageFiltersSelected.includes(filter.value) ? 'active' : ''}`}
+                      onClick={() => toggleAgeFilter(filter.value)}
                       disabled={!wizardPreview}
                     >
                       {filter.label}
@@ -2238,6 +2335,20 @@ export default function ReviewPage() {
                   <div className="loading-box">
                     <div className="loading-text">
                       Cargando datos... {wizardProgress}% {wizardPreviewStatus ? `· ${wizardPreviewStatus}` : ''}
+                    </div>
+                    <div className="loading-summary">
+                      <span><strong>País:</strong> {wizardCountry}</span>
+                      <span><strong>Etapa:</strong> {wizardStageName || `Etapa ${wizardStageId}`}</span>
+                      <span><strong>Origen:</strong> {wizardSource === 'manual' ? 'Archivo' : 'Pipedrive'}</span>
+                      {wizardSource === 'auto' && (
+                        <>
+                          <span><strong>Ejecutivos:</strong> {wizardOwnerMode === 'all' ? 'Todos' : `${wizardSelectedOwners.length} seleccionados`}</span>
+                          <span><strong>Etiquetas:</strong> {wizardLabelInclude.length ? wizardLabelInclude.map((id) => LABEL_OPTIONS.find((opt) => opt.id === id)?.label || id).join(', ') : 'Todas'}</span>
+                          {wizardLabelExclude.length > 0 && (
+                            <span><strong>Excluir:</strong> {wizardLabelExclude.map((id) => LABEL_OPTIONS.find((opt) => opt.id === id)?.label || id).join(', ')}</span>
+                          )}
+                        </>
+                      )}
                     </div>
                     <div className="loading-bar">
                       <div className="loading-fill" style={{ width: `${wizardProgress}%` }} />
@@ -2268,7 +2379,7 @@ export default function ReviewPage() {
                 {wizardAgeStats.length > 0 && (
                   <div className="age-chart">
                     {wizardAgeStats.map((stat) => {
-                      const isActive = wizardAgeFilter === 'all' || wizardAgeFilter === stat.filter;
+                      const isActive = ageFiltersSelected.includes('all') || ageFiltersSelected.includes(stat.filter);
                       return (
                         <div
                           key={stat.label}
@@ -2418,7 +2529,11 @@ export default function ReviewPage() {
                   <div>
                     <div className="stat-label">Antigüedad</div>
                     <div className="stat-value">
-                      {AGE_FILTERS.find((filter) => filter.value === wizardAgeFilter)?.label}
+                      {ageFiltersSelected.includes('all')
+                        ? 'Todos'
+                        : ageFiltersSelected
+                            .map((value) => AGE_FILTERS.find((filter) => filter.value === value)?.label || value)
+                            .join(' + ')}
                     </div>
                   </div>
                   <div>
@@ -4117,6 +4232,19 @@ export default function ReviewPage() {
           border-radius: 14px;
           padding: 14px;
           cursor: pointer;
+          transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+        }
+        .upload-drop.is-loading {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 2px rgba(249, 71, 47, 0.12);
+        }
+        .upload-drop.is-ready {
+          border-color: rgba(90, 200, 120, 0.55);
+          background: rgba(90, 200, 120, 0.08);
+        }
+        .upload-drop.has-error {
+          border-color: rgba(255, 99, 99, 0.7);
+          background: rgba(255, 99, 99, 0.08);
         }
         .upload-drop input {
           position: absolute;
@@ -4136,6 +4264,38 @@ export default function ReviewPage() {
           font-size: 11px;
           color: var(--text-subtle);
         }
+        .upload-status {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .status-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 6px 10px;
+          border-radius: 999px;
+          font-size: 12px;
+          font-weight: 600;
+          border: 1px solid var(--border);
+          background: var(--surface);
+          color: var(--text-muted);
+        }
+        .status-pill.success {
+          border-color: rgba(90, 200, 120, 0.55);
+          color: var(--text-primary);
+          background: rgba(90, 200, 120, 0.12);
+        }
+        .status-pill.error {
+          border-color: rgba(255, 99, 99, 0.7);
+          color: var(--text-primary);
+          background: rgba(255, 99, 99, 0.12);
+        }
+        .status-pill.loading {
+          border-color: var(--accent);
+          color: var(--text-primary);
+          background: var(--accent-soft);
+        }
         .wizard-stats {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -4144,6 +4304,23 @@ export default function ReviewPage() {
         .wizard-stats .stat-card {
           background: linear-gradient(135deg, var(--surface), var(--surface-soft));
           border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 12px;
+          min-height: 86px;
+          align-content: space-between;
+        }
+        .wizard-stats .stat-label {
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.4px;
+          color: var(--text-subtle);
+          line-height: 1.2;
+        }
+        .wizard-stats .stat-value {
+          font-size: 24px;
+          font-weight: 700;
+          color: var(--text-primary);
+          line-height: 1.1;
         }
         .loading-box {
           display: grid;
@@ -4171,6 +4348,16 @@ export default function ReviewPage() {
         .loading-text {
           font-size: 12px;
           color: var(--text-muted);
+        }
+        .loading-summary {
+          display: grid;
+          gap: 4px;
+          font-size: 12px;
+          color: var(--text-subtle);
+        }
+        .loading-summary strong {
+          color: var(--text-primary);
+          font-weight: 600;
         }
         .loading-bar {
           width: 100%;

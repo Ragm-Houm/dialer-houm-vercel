@@ -41,10 +41,34 @@ function extractOwnerId(deal) {
  
 function getDealLabels(deal) {
   if (!deal) return [];
-  const value = deal.label;
-  if (value === null || value === undefined || value === '') return [];
-  if (typeof value === 'number') return [String(value)];
-  return String(value)
+  const raw =
+    deal.label !== undefined
+      ? deal.label
+      : deal.label_ids !== undefined
+      ? deal.label_ids
+      : deal.labels !== undefined
+      ? deal.labels
+      : null;
+  if (raw === null || raw === undefined || raw === '') return [];
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) => {
+        if (item === null || item === undefined) return null;
+        if (typeof item === 'number' || typeof item === 'string') return String(item);
+        if (typeof item === 'object') {
+          if (item.id !== undefined && item.id !== null) return String(item.id);
+          if (item.value !== undefined && item.value !== null) return String(item.value);
+        }
+        return String(item);
+      })
+      .filter(Boolean);
+  }
+  if (typeof raw === 'object') {
+    if (raw.id !== undefined && raw.id !== null) return [String(raw.id)];
+    if (raw.value !== undefined && raw.value !== null) return [String(raw.value)];
+  }
+  if (typeof raw === 'number') return [String(raw)];
+  return String(raw)
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);

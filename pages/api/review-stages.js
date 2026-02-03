@@ -1,4 +1,4 @@
-const { listStages } = require('../../lib/pipedrive');
+const axios = require('axios');
 const { getCountryConfig } = require('../../lib/review');
 
 export default async function handler(req, res) {
@@ -13,7 +13,28 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Pais invalido' });
     }
 
-    const stages = await listStages(config.pipelineId);
+    const token = process.env.PIPEDRIVE_API_TOKEN;
+    const domain = process.env.PIPEDRIVE_DOMAIN;
+    const url = `https://${domain}/api/v1/stages?pipeline_id=${config.pipelineId}&api_token=${encodeURIComponent(token || '')}`;
+
+    let rawResponse = null;
+    let rawStatus = null;
+    let rawError = null;
+
+    try {
+      const response = await axios.get(url, {
+        timeout: 15000,
+        headers: { 'Content-Type': 'application/json' },
+        validateStatus: () => true
+      });
+      rawStatus = response.status;
+      rawResponse = response.data;
+    } catch (axErr) {
+      rawError = axErr.message;
+    }
+
+    const stages = (rawResponse && rawResponse.success && rawResponse.data) ? rawResponse.data : [];
+
     const result = {
       country,
       pipelineId: config.pipelineId,
@@ -28,10 +49,13 @@ export default async function handler(req, res) {
     if (debug === 'true') {
       result._debug = {
         rawStagesCount: stages.length,
-        hasDomain: !!process.env.PIPEDRIVE_DOMAIN,
-        hasToken: !!process.env.PIPEDRIVE_API_TOKEN,
-        tokenLen: (process.env.PIPEDRIVE_API_TOKEN || '').length,
-        domainVal: (process.env.PIPEDRIVE_DOMAIN || '').slice(0, 15) + '...'
+        httpStatus: rawStatus,
+        apiSuccess: rawResponse?.success,
+        apiError: rawResponse?.error || rawError || null,
+        apiErrorInfo: rawResponse?.error_info || null,
+        tokenLen: (token || '').length,
+        domainVal: (domain || '').slice(0, 20),
+        urlUsed: url.replace(token || '', '***')
       };
     }
 

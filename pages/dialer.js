@@ -21,7 +21,6 @@ import {
   List,
   Loader2,
   LogOut,
-  Mail,
   MessageCircle,
   Mic,
   MicOff,
@@ -94,6 +93,9 @@ export default function Home() {
   const [selectedStageId, setSelectedStageId] = useState('');
   const [lostReasons, setLostReasons] = useState([]);
   const [selectedLostReason, setSelectedLostReason] = useState('');
+  const [lostReasonText, setLostReasonText] = useState('');
+  const [stageSearch, setStageSearch] = useState('');
+  const [ownerSearchTerm, setOwnerSearchTerm] = useState('');
   const [selectedOwnerId, setSelectedOwnerId] = useState('');
   const [autoCallCountdown, setAutoCallCountdown] = useState(null);
   const [autoCallMessage, setAutoCallMessage] = useState('');
@@ -121,6 +123,7 @@ export default function Home() {
   const [selectedInputId, setSelectedInputId] = useState('');
   const [selectedOutputId, setSelectedOutputId] = useState('');
   const [audioLevel, setAudioLevel] = useState(0);
+  const [audioMenuOpen, setAudioMenuOpen] = useState(false);
   const autoStartRef = useRef(false);
   const menuOpenRef = useRef(null);
   const campaignTimerRef = useRef(null);
@@ -277,6 +280,20 @@ export default function Home() {
   }, [sessionStarted, email]);
 
   useEffect(() => {
+    if (!showPostCallForm) return;
+    loadCallOutcomes();
+  }, [showPostCallForm]);
+
+  useEffect(() => {
+    if (!sessionStarted) return;
+    const OUTCOMES_REFRESH_MS = 5 * 60 * 1000;
+    const interval = setInterval(() => {
+      loadCallOutcomes();
+    }, OUTCOMES_REFRESH_MS);
+    return () => clearInterval(interval);
+  }, [sessionStarted, email]);
+
+  useEffect(() => {
     if (!sessionStarted) return;
     loadDealUsers();
   }, [sessionStarted]);
@@ -296,6 +313,33 @@ export default function Home() {
     };
     fetchLostReasons();
   }, [sessionStarted, email]);
+
+  useEffect(() => {
+    if (!currentLead?.pipedrive?.stages?.length) {
+      if (!selectedStageId) setStageSearch('');
+      return;
+    }
+    const selected = currentLead.pipedrive.stages.find((stage) => String(stage.id) === String(selectedStageId));
+    if (selected) {
+      setStageSearch(selected.name || '');
+    } else if (!selectedStageId) {
+      setStageSearch('');
+    }
+  }, [selectedStageId, currentLead?.pipedrive?.stages]);
+
+  useEffect(() => {
+    if (!dealUsers.length) {
+      if (!selectedOwnerId) setOwnerSearchTerm('');
+      return;
+    }
+    const selected = dealUsers.find((user) => String(user.id) === String(selectedOwnerId));
+    if (selected) {
+      const label = `${selected.name || ''}${selected.email ? ` (${selected.email})` : ''}`.trim();
+      setOwnerSearchTerm(label);
+    } else if (!selectedOwnerId) {
+      setOwnerSearchTerm('');
+    }
+  }, [selectedOwnerId, dealUsers]);
 
   useEffect(() => {
     if (!email) return;
@@ -390,7 +434,7 @@ export default function Home() {
   }, [twilioDevice, selectedOutputId]);
 
   useEffect(() => {
-    if (!sessionStarted || !selectedInputId) return;
+    if (!sessionStarted || !selectedInputId || !audioMenuOpen) return;
     let cancelled = false;
 
     const startMeter = async () => {
@@ -448,7 +492,7 @@ export default function Home() {
       analyserRef.current = null;
       setAudioLevel(0);
     };
-  }, [sessionStarted, selectedInputId]);
+  }, [sessionStarted, selectedInputId, audioMenuOpen]);
 
   // Cargar Twilio Voice SDK 2.x desde archivo local
   useEffect(() => {
@@ -635,7 +679,7 @@ export default function Home() {
         email: verifiedEmail,
         role: meData.user?.role || 'ejecutivo',
         country: userCountry,
-        picture: meData.google?.picture || ''
+        picture: meData.google?.picture || session?.picture || ''
       });
 
       if (!sdkLoaded || !DeviceClass) {
@@ -1436,7 +1480,10 @@ export default function Home() {
     setAvailabilityDecision('keep');
     setSelectedStageId('');
     setSelectedLostReason('');
+    setLostReasonText('');
     setSelectedOwnerId('');
+    setStageSearch('');
+    setOwnerSearchTerm('');
     setFormError('');
   };
 
@@ -1507,7 +1554,7 @@ export default function Home() {
       setFormError('Selecciona la etapa de destino.');
       return;
     }
-    if (isLost && config.require_lost_reason && !selectedLostReason) {
+    if (isLost && config.require_lost_reason && !selectedLostReason && !lostReasonText.trim()) {
       setFormError('Selecciona el motivo de pérdida.');
       return;
     }
@@ -1542,6 +1589,15 @@ export default function Home() {
           nextTaskLabel: `Disponibilidad en ${futureDays} dias`
         };
       }
+      if (isPositive && selectedConfig.create_followup) {
+        const { date, time } = addDaysInZone(1, timeZone);
+        return {
+          nextTaskDate: date,
+          nextTaskTime: time || '09:00',
+          nextTaskType: 'seguimiento',
+          nextTaskLabel: 'Seguimiento positivo'
+        };
+      }
       return {};
     })();
 
@@ -1574,9 +1630,16 @@ export default function Home() {
         addActionLog('Etapa actualizada en Pipedrive');
       }
 
+      const manualLostNote = lostReasonText.trim()
+        ? `Motivo de pérdida (manual): ${lostReasonText.trim()}`
+        : '';
+      const combinedNotes = manualLostNote
+        ? `${callNotes ? `${callNotes}\n` : ''}${manualLostNote}`
+        : callNotes;
+
       await logCallToPipedrive({
         resultado: selectedOutcome,
-        notas: callNotes,
+        notas: combinedNotes,
         proximaAccion: outcomeDef.label,
         status: 'completed',
         duracion: duration,
@@ -1596,6 +1659,16 @@ export default function Home() {
           })
         });
         addActionLog('Negocio marcado como perdido en Pipedrive');
+      } else if (isLost) {
+        await csrfFetch('/api/pipedrive-deal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dealId: currentLead?.pipedriveDealId,
+            status: 'lost'
+          })
+        });
+        addActionLog('Negocio marcado como perdido en Pipedrive (motivo manual)');
       }
 
       const forceDone = !!config.mark_done || isLost || isFuture;
@@ -1779,8 +1852,8 @@ export default function Home() {
   };
 
   const handleJoinCampaign = async () => {
-    if (!selectedCampaignKey) {
-      showActionToast('Selecciona una campaña para unirte.');
+    if (!selectedCampaignKey || !selectedCampaignValid) {
+      showActionToast('Selecciona una campaña activa para unirte.');
       return;
     }
     if (!callerIdRef.current) {
@@ -1893,7 +1966,11 @@ export default function Home() {
 
   // Construir URL de Pipedrive (usa dominio dinámico del API)
   const getPipedriveUrl = (dealId) => {
-    const domain = currentLead?.pipedriveDomain || process.env.NEXT_PUBLIC_PIPEDRIVE_DOMAIN || 'arriendoasegurado';
+    const raw = currentLead?.pipedriveDomain || process.env.NEXT_PUBLIC_PIPEDRIVE_DOMAIN || 'arriendoasegurado';
+    const domain = String(raw || '')
+      .replace(/^https?:\/\//, '')
+      .replace(/\/.*$/, '')
+      .replace(/\.pipedrive\.com$/i, '');
     return `https://${domain}.pipedrive.com/deal/${dealId}`;
   };
 
@@ -2383,11 +2460,11 @@ export default function Home() {
   const LOST_KEYS = new Set(['informacion_falsa', 'le_parece_caro', 'intentos_max']);
 
   const DEFAULT_OUTCOMES = [
-    { key: 'interesado', label: 'Interesado', outcome_type: 'final', metric_bucket: 'contacto_efectivo', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
-    { key: 'fotos_agendadas', label: 'Fotos agendadas', outcome_type: 'final', metric_bucket: 'conversion', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
-    { key: 'propiedad_publicada', label: 'Propiedad publicada', outcome_type: 'final', metric_bucket: 'conversion', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
-    { key: 'propiedad_reservada', label: 'Propiedad reservada', outcome_type: 'final', metric_bucket: 'conversion', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
-    { key: 'propiedad_arrendada', label: 'Propiedad arrendada', outcome_type: 'final', metric_bucket: 'conversion', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
+    { key: 'interesado', label: 'Interesado', outcome_type: 'final', metric_bucket: 'contacto_efectivo', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: true, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
+    { key: 'fotos_agendadas', label: 'Fotos agendadas', outcome_type: 'final', metric_bucket: 'conversion', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: true, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
+    { key: 'propiedad_publicada', label: 'Propiedad publicada', outcome_type: 'final', metric_bucket: 'conversion', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: true, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
+    { key: 'propiedad_reservada', label: 'Propiedad reservada', outcome_type: 'final', metric_bucket: 'conversion', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: true, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
+    { key: 'propiedad_arrendada', label: 'Propiedad arrendada', outcome_type: 'final', metric_bucket: 'conversion', category: 'positive', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: true, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
     { key: 'no_contesta', label: 'No contesta', outcome_type: 'intermediate', metric_bucket: 'no_contacto', category: 'neutral', action_config: { assign_owner: false, allow_change_owner: false, change_stage: 'no', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: true, mark_done: false, allow_retry: true, require_retry_time: true, require_future_delay: false } },
     { key: 'disponibilidad_futura', label: 'Disponibilidad futura', outcome_type: 'intermediate', metric_bucket: 'seguimiento', category: 'neutral', action_config: { assign_owner: false, allow_change_owner: false, change_stage: 'no', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: true, mark_done: false, allow_retry: false, require_retry_time: false, require_future_delay: true } },
     { key: 'informacion_falsa', label: 'Información falsa', outcome_type: 'final', metric_bucket: 'descarte', category: 'negative', action_config: { assign_owner: true, allow_change_owner: true, change_stage: 'no', log_pipedrive: true, mark_lost: true, require_lost_reason: true, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false } },
@@ -2404,11 +2481,15 @@ export default function Home() {
   // Helper: obtener action_config del outcome, con fallback a derivación por metric_bucket
   const getActionConfig = (outcomeDef) => {
     if (outcomeDef?.action_config && Object.keys(outcomeDef.action_config).length > 0) {
-      return outcomeDef.action_config;
+      const config = { ...outcomeDef.action_config };
+      if (POSITIVE_BUCKETS.has(outcomeDef?.metric_bucket) && config.create_followup === false) {
+        config.create_followup = true;
+      }
+      return config;
     }
     // Fallback legacy: derivar de metric_bucket
     if (POSITIVE_BUCKETS.has(outcomeDef?.metric_bucket)) {
-      return { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: false, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false };
+      return { assign_owner: true, allow_change_owner: true, change_stage: 'optional', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: true, mark_done: true, allow_retry: false, require_retry_time: false, require_future_delay: false };
     }
     if (NEUTRAL_BUCKETS.has(outcomeDef?.metric_bucket)) {
       return { assign_owner: false, allow_change_owner: false, change_stage: 'no', log_pipedrive: true, mark_lost: false, require_lost_reason: false, create_followup: true, mark_done: false, allow_retry: outcomeDef?.metric_bucket === 'no_contesta', require_retry_time: outcomeDef?.metric_bucket === 'no_contesta', require_future_delay: outcomeDef?.metric_bucket === 'futuro' };
@@ -2441,6 +2522,7 @@ export default function Home() {
     () => campaigns.find((c) => c.campaign_key === selectedCampaignKey) || null,
     [campaigns, selectedCampaignKey]
   );
+  const selectedCampaignValid = !!selectedCampaign && String(selectedCampaign.status || 'active') === 'active';
   const campaignHandled = selectedCampaign?.handled || 0;
   const campaignPending = selectedCampaign?.pending || 0;
   const campaignTotal = selectedCampaign ? campaignHandled + campaignPending : 0;
@@ -2462,12 +2544,13 @@ export default function Home() {
   const showStageSelector = selectedOutcome
     ? (selectedConfig.change_stage === 'optional' || selectedConfig.change_stage === 'required') || (outcomeIsFuture && availabilityDecision === 'move')
     : false;
+  const lostReasonMissing = outcomeIsLost && selectedConfig.require_lost_reason && !selectedLostReason && !lostReasonText.trim();
   const isSaveDisabled =
     !selectedOutcome ||
     (outcomeIsNoContesta && selectedConfig.require_retry_time && !retryDelay) ||
     (outcomeIsFuture && selectedConfig.require_future_delay && !futureDelay) ||
     (outcomeRequiresStage && !selectedStageId) ||
-    (outcomeIsLost && selectedConfig.require_lost_reason && !selectedLostReason);
+    lostReasonMissing;
 
   if (!isSessionReady) {
     return (
@@ -3043,6 +3126,24 @@ export default function Home() {
         .form-group {
           margin-bottom: 14px;
         }
+        .form-hint {
+          font-size: 12px;
+          color: var(--text-muted);
+          margin-bottom: 8px;
+        }
+        .filter-input {
+          width: 100%;
+          background: var(--surface-strong);
+          border: 1px solid var(--border-strong);
+          color: var(--text-primary);
+          padding: 8px 10px;
+          border-radius: 10px;
+          font-weight: 600;
+          margin-bottom: 8px;
+        }
+        .filter-input::placeholder {
+          color: var(--text-muted);
+        }
         .form-error {
           margin-top: 10px;
           padding: 10px 12px;
@@ -3418,6 +3519,10 @@ export default function Home() {
           transform: scale(1.05);
           box-shadow: 0 12px 32px rgba(0, 200, 83, 0.5);
         }
+        .btn-call-countdown {
+          min-width: 220px;
+          justify-content: center;
+        }
         .btn-hangup {
           background: linear-gradient(135deg, var(--danger) 0%, var(--danger-strong) 100%);
           color: white;
@@ -3484,11 +3589,12 @@ export default function Home() {
           min-height: 52px;
         }
         .lead-card {
-          background: linear-gradient(135deg, var(--border-strong) 0%, var(--surface) 100%);
+          background: var(--surface);
           padding: 24px;
           border-radius: 20px;
           margin-bottom: 20px;
-          border: 1px solid var(--border-strong);
+          border: 1px solid var(--border);
+          box-shadow: 0 10px 22px rgba(0, 0, 0, 0.1);
         }
         .lead-header {
           display: flex;
@@ -3560,6 +3666,65 @@ export default function Home() {
           background: var(--surface);
           display: grid;
           gap: 12px;
+        }
+        .step-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+        }
+        .step-header {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .step-badge {
+          width: 26px;
+          height: 26px;
+          border-radius: 50%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          font-weight: 700;
+          color: #fff;
+          background: linear-gradient(135deg, #8abf6f 0%, #6aa857 100%);
+          box-shadow: 0 6px 14px rgba(0, 200, 83, 0.35);
+          flex-shrink: 0;
+        }
+        .step-title {
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-primary);
+        }
+        .step-subtitle {
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+        .campaign-meta {
+          display: grid;
+          gap: 8px;
+        }
+        .campaign-meta-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          border-radius: 12px;
+          background: var(--surface-alt);
+          border: 1px solid var(--border);
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+        .campaign-meta-row.ok {
+          border-color: rgba(0, 200, 83, 0.45);
+          background: rgba(0, 200, 83, 0.12);
+          color: var(--success);
+        }
+        .campaign-meta-row.warn {
+          border-color: rgba(255, 122, 41, 0.45);
+          background: rgba(255, 122, 41, 0.12);
+          color: #ffb27a;
         }
         .campaign-note {
           font-size: 12px;
@@ -4157,12 +4322,13 @@ export default function Home() {
         }
         .call-panel {
           margin-top: 20px;
-          padding: 16px;
+          padding: 18px;
           border-radius: 18px;
-          border: 1px solid var(--border-strong);
-          background: var(--surface-alt);
+          border: 1px solid var(--border);
+          background: var(--surface);
           display: grid;
           gap: 14px;
+          box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
         }
         .section-header {
           display: flex;
@@ -4885,7 +5051,8 @@ export default function Home() {
                 selectedOutputId,
                 onInputChange: setSelectedInputId,
                 onOutputChange: setSelectedOutputId,
-                level: audioLevel
+                level: audioLevel,
+                onMenuOpen: setAudioMenuOpen
               }}
             />
           )}
@@ -4952,7 +5119,12 @@ export default function Home() {
                       <div className="summary-value">
                         {campaignJoined ? formatDuration(campaignElapsed) : '--:--'}
                       </div>
-                      <div className="summary-sub">Tiempo activo en campaña</div>
+                      <div className="summary-sub">
+                        Tiempo activo en campaña
+                        {campaignJoined ? (
+                          <span className="summary-subline">En llamadas {formatDuration(campaignCallSeconds)}</span>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -4979,7 +5151,7 @@ export default function Home() {
                     <button
                       className="btn btn-primary"
                       onClick={handleJoinCampaign}
-                      disabled={!selectedCampaignKey || !callerId}
+                      disabled={!selectedCampaignKey || !selectedCampaignValid || !callerId}
                     >
                       Unirse a campaña
                     </button>
@@ -5066,6 +5238,7 @@ export default function Home() {
                               setAvailabilityDecision('keep');
                               setSelectedStageId('');
                               setSelectedLostReason('');
+                              setLostReasonText('');
                               setFormError('');
                             }}
                             type="button"
@@ -5151,23 +5324,52 @@ export default function Home() {
                       </div>
                     )}
 
-                    {showStageSelector && currentLead?.pipedrive?.stages?.length > 0 && (
+                    {showStageSelector && (
                       <div className="form-group">
                         <label className="field-label">
                           <span className="label-icon"><BarChart3 className="icon-sm" /></span>
                           {outcomeRequiresStage ? 'Selecciona etapa de destino *' : 'Cambiar etapa (opcional)'}
                         </label>
-                        <select
-                          value={selectedStageId}
-                          onChange={(e) => setSelectedStageId(e.target.value)}
-                        >
-                          {!outcomeRequiresStage && <option value="">Mantener etapa actual</option>}
-                          {currentLead.pipedrive.stages.map((stage) => (
-                            <option key={stage.id} value={stage.id}>
-                              {stage.name}
-                            </option>
-                          ))}
-                        </select>
+                        {currentLead?.pipedrive?.stages?.length ? (
+                          <>
+                            <input
+                              className="filter-input"
+                              placeholder={outcomeRequiresStage ? 'Buscar etapa...' : 'Mantener etapa actual'}
+                              list="stage-options"
+                              value={stageSearch}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setStageSearch(value);
+                                if (!value || value === 'Mantener etapa actual') {
+                                  if (!outcomeRequiresStage) {
+                                    setSelectedStageId('');
+                                  }
+                                  return;
+                                }
+                                const match = currentLead.pipedrive.stages.find(
+                                  (stage) => String(stage.name || '').toLowerCase() === value.toLowerCase()
+                                );
+                                if (match) {
+                                  setSelectedStageId(String(match.id));
+                                }
+                              }}
+                            />
+                            <datalist id="stage-options">
+                              {!outcomeRequiresStage && <option value="Mantener etapa actual" />}
+                              {currentLead.pipedrive.stages
+                                .filter((stage) =>
+                                  stageSearch
+                                    ? String(stage.name || '').toLowerCase().includes(stageSearch.toLowerCase())
+                                    : true
+                                )
+                                .map((stage) => (
+                                  <option key={stage.id} value={stage.name} />
+                                ))}
+                            </datalist>
+                          </>
+                        ) : (
+                          <div className="form-hint">No se pudieron cargar etapas en Pipedrive.</div>
+                        )}
                       </div>
                     )}
 
@@ -5177,17 +5379,47 @@ export default function Home() {
                           <span className="label-icon"><User className="icon-sm" /></span>
                           Cambiar responsable (opcional)
                         </label>
-                        <select
-                          value={selectedOwnerId}
-                          onChange={(e) => setSelectedOwnerId(e.target.value)}
-                        >
-                          <option value="">Auto-asignar a mi</option>
-                          {dealUsers.map((user) => (
-                            <option key={user.id} value={user.id}>
-                              {user.name} {user.email ? `(${user.email})` : ''}
-                            </option>
-                          ))}
-                        </select>
+                        <input
+                          className="filter-input"
+                          placeholder="Buscar responsable..."
+                          list="owner-options"
+                          value={ownerSearchTerm}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setOwnerSearchTerm(value);
+                            if (!value) {
+                              setSelectedOwnerId('');
+                              return;
+                            }
+                            if (value === 'Auto-asignar a mi') {
+                              setSelectedOwnerId('');
+                              return;
+                            }
+                            const match = dealUsers.find((user) => {
+                              const label = `${user.name || ''}${user.email ? ` (${user.email})` : ''}`.trim();
+                              return label.toLowerCase() === value.toLowerCase();
+                            });
+                            if (match) {
+                              setSelectedOwnerId(String(match.id));
+                            }
+                          }}
+                        />
+                        <datalist id="owner-options">
+                          <option value="Auto-asignar a mi" />
+                          {dealUsers
+                            .filter((user) => {
+                              if (!ownerSearchTerm) return true;
+                              const term = ownerSearchTerm.toLowerCase();
+                              return (
+                                String(user.name || '').toLowerCase().includes(term) ||
+                                String(user.email || '').toLowerCase().includes(term)
+                              );
+                            })
+                            .map((user) => {
+                              const label = `${user.name || ''}${user.email ? ` (${user.email})` : ''}`.trim();
+                              return <option key={user.id} value={label} />;
+                            })}
+                        </datalist>
                       </div>
                     )}
 
@@ -5197,17 +5429,29 @@ export default function Home() {
                           <span className="label-icon"><XCircle className="icon-sm" /></span>
                           Motivo de pérdida *
                         </label>
-                        <select
-                          value={selectedLostReason}
-                          onChange={(e) => setSelectedLostReason(e.target.value)}
-                        >
-                          <option value="">Selecciona motivo</option>
-                          {lostReasons.map((reason) => (
-                            <option key={reason.id} value={reason.id}>
-                              {reason.label || reason.name}
-                            </option>
-                          ))}
-                        </select>
+                        {lostReasons.length > 0 ? (
+                          <select
+                            value={selectedLostReason}
+                            onChange={(e) => setSelectedLostReason(e.target.value)}
+                          >
+                            <option value="">Selecciona motivo</option>
+                            {lostReasons.map((reason) => (
+                              <option key={reason.id} value={reason.id}>
+                                {reason.label || reason.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <>
+                            <div className="form-hint">Sin razones configuradas en Pipedrive.</div>
+                            <input
+                              className="input"
+                              placeholder="Escribe el motivo manual"
+                              value={lostReasonText}
+                              onChange={(e) => setLostReasonText(e.target.value)}
+                            />
+                          </>
+                        )}
                       </div>
                     )}
 
@@ -5321,23 +5565,18 @@ export default function Home() {
                           <>
                             {autoCallCountdown !== null ? (
                               <div className="auto-call-row">
-                                <div className="auto-call-status">
-                                  {autoCallMessage || 'Llamando en'} {autoCallCountdown}s
-                                </div>
-                                <div className="auto-call-actions">
-                                  <button className="btn btn-call" onClick={() => makeCall()} title="Llamar ahora">
-                                    <span className="call-icon"><PhoneCall className="icon-lg" /></span>
-                                    Llamar ahora
-                                  </button>
-                                  <button className="btn btn-secondary" onClick={handleAutoCallCancel}>
-                                    Cancelar
-                                  </button>
-                                </div>
+                                <button className="btn btn-call btn-call-countdown" onClick={() => makeCall()} title="Llamar ahora">
+                                  <span className="call-icon"><PhoneCall className="icon-lg" /></span>
+                                  {autoCallMessage ? `${autoCallMessage} ${autoCallCountdown}s` : `Llamando en ${autoCallCountdown}s`}
+                                </button>
+                                <button className="btn btn-secondary" onClick={handleAutoCallCancel}>
+                                  Cancelar
+                                </button>
                               </div>
                             ) : (
                               <button className="btn btn-call" onClick={makeCall} title="Llamar" disabled={!campaignJoined}>
                                 <span className="call-icon"><PhoneCall className="icon-lg" /></span>
-                                Llamar
+                                {callStatus === 'Timbrando' ? 'Timbrando' : callStatus === 'Llamando' ? 'Marcando' : 'Llamar'}
                               </button>
                             )}
                             <button
@@ -5648,11 +5887,12 @@ export default function Home() {
               </div>
 
               <div className="right-panel">
-                <div className="card campaign-card">
-                  <div className="campaign-header">
+                <div className="card campaign-card step-card">
+                  <div className="step-header">
+                    <span className="step-badge">1</span>
                     <div>
-                      <div className="campaign-title">Campaña activa</div>
-                      <div className="campaign-subtitle">Selecciona para comenzar</div>
+                      <div className="step-title">Paso 1 · Campaña</div>
+                      <div className="step-subtitle">Selecciona para comenzar</div>
                     </div>
                     {campaignsLoading && <Loader2 className="icon-sm spin" />}
                   </div>
@@ -5710,7 +5950,7 @@ export default function Home() {
                   <button
                     className="btn btn-primary btn-full"
                     onClick={handleJoinCampaign}
-                    disabled={!selectedCampaignKey || campaignJoined || !callerId}
+                    disabled={!selectedCampaignKey || !selectedCampaignValid || campaignJoined || !callerId}
                   >
                     {campaignJoined ? 'En campaña' : 'Unirse a campaña'}
                   </button>
@@ -5755,15 +5995,19 @@ export default function Home() {
                   })()}
                 </div>
 
-                <div className="card audio-status-card">
-                  <div className="audio-status-header">
-                    <div className="audio-status-title">Audio</div>
+                <div className="card audio-status-card step-card">
+                  <div className="step-header">
+                    <span className="step-badge">2</span>
+                    <div>
+                      <div className="step-title">Paso 2 · Audio</div>
+                      <div className="step-subtitle">Micrófono y altavoz</div>
+                    </div>
                     <span className={`audio-status-pill ${selectedInputId ? 'ok' : 'error'}`}>
                       {selectedInputId ? 'Listo' : 'Sin configurar'}
                     </span>
                   </div>
                   <div className="audio-status-body">
-                    {selectedInputId ? 'Audio configurado correctamente.' : 'Configura microfono y altavoz desde el menu.'}
+                    {selectedInputId ? 'Micrófono configurado correctamente.' : 'Configura micrófono y altavoz desde el menú.'}
                   </div>
                   <button
                     className="btn btn-secondary btn-full"
